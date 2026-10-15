@@ -1,6 +1,6 @@
-const PLUGGY_BASE_URL = process.env.PLUGGY_BASE_URL || 'https://api.pluggy.ai';
-const PLUGGY_CLIENT_ID = process.env.PLUGGY_CLIENT_ID || '';
-const PLUGGY_CLIENT_SECRET = process.env.PLUGGY_CLIENT_SECRET || '';
+const PLUGGY_BASE_URL = (process.env.PLUGGY_BASE_URL || 'https://api.pluggy.ai').trim().replace(/^["']|["']$/g, '');
+const PLUGGY_CLIENT_ID = (process.env.PLUGGY_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
+const PLUGGY_CLIENT_SECRET = (process.env.PLUGGY_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '');
 
 interface PluggyApiKeyCache {
   apiKey: string;
@@ -51,8 +51,20 @@ export async function getPluggyApiKey(): Promise<string> {
 /**
  * Creates an ephemeral Connect Token to open the Pluggy Connect Widget
  */
-export async function createPluggyConnectToken(itemId?: string): Promise<{ accessToken: string }> {
+export async function createPluggyConnectToken(
+  optionsOrItemId?: string | { itemId?: string; connectorId?: number }
+): Promise<{ accessToken: string }> {
   const apiKey = await getPluggyApiKey();
+
+  const bodyPayload: any = {};
+  if (typeof optionsOrItemId === 'string') {
+    if (optionsOrItemId) bodyPayload.itemId = optionsOrItemId;
+  } else if (optionsOrItemId) {
+    if (optionsOrItemId.itemId) bodyPayload.itemId = optionsOrItemId.itemId;
+    if (optionsOrItemId.connectorId) {
+      bodyPayload.options = { connectorId: optionsOrItemId.connectorId };
+    }
+  }
 
   const response = await fetch(`${PLUGGY_BASE_URL}/connect_token`, {
     method: 'POST',
@@ -60,7 +72,7 @@ export async function createPluggyConnectToken(itemId?: string): Promise<{ acces
       'Content-Type': 'application/json',
       'X-API-KEY': apiKey,
     },
-    body: JSON.stringify(itemId ? { itemId } : {}),
+    body: JSON.stringify(bodyPayload),
   });
 
   if (!response.ok) {
