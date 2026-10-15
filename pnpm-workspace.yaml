@@ -1,0 +1,7 @@
+allowBuilds:
+  sharp: false
+  unrs-resolver: false
+minimumReleaseAgeExclude:
+  - '@next/swc-linux-arm64-gnu@16.4.1'
+  - '@next/swc-win32-arm64-msvc@16.4.1'
+  - next@16.4.1
