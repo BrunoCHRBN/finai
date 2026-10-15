@@ -37,9 +37,9 @@ export function DashboardView({
 
   // Status badge config
   const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
-    OPTIMAL: { label: 'Trajetória Segura', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30', icon: CheckCircle2 },
-    ATTENTION: { label: 'Atenção Necessária', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30', icon: AlertTriangle },
-    CRITICAL: { label: 'Ponto Crítico', color: 'text-rose-400 bg-rose-500/10 border-rose-500/30', icon: ShieldAlert },
+    OPTIMAL: { label: 'Superávit Seguro', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30', icon: CheckCircle2 },
+    ATTENTION: { label: 'Ajuste de Gastos', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30', icon: AlertTriangle },
+    CRITICAL: { label: 'Déficit de Caixa', color: 'text-rose-400 bg-rose-500/10 border-rose-500/30', icon: ShieldAlert },
   };
 
   const currentStatus = statusConfig[diagnosis?.status] || statusConfig['ATTENTION'];
@@ -52,7 +52,7 @@ export function DashboardView({
         {/* Incomes */}
         <div className="p-4 rounded-xl border border-[#1e2634] bg-[#0f1319] hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Receitas Totais</span>
+            <span>Entradas do Mês</span>
             <div className="p-1 rounded bg-emerald-500/10 text-emerald-400">
               <ArrowUpRight className="w-4 h-4" />
             </div>
@@ -61,14 +61,14 @@ export function DashboardView({
             {formatCurrency(metrics.totalIncome)}
           </div>
           <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 font-mono">
-            <span>Mês Vigente (Outubro)</span>
+            <span>Outubro 2026</span>
           </div>
         </div>
 
         {/* Expenses */}
         <div className="p-4 rounded-xl border border-[#1e2634] bg-[#0f1319] hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Despesas Totais</span>
+            <span>Gastos do Mês</span>
             <div className="p-1 rounded bg-rose-500/10 text-rose-400">
               <ArrowDownRight className="w-4 h-4" />
             </div>
@@ -78,14 +78,14 @@ export function DashboardView({
           </div>
           <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
             <span>Fixos: {formatCurrency(metrics.fixedExpenses)}</span>
-            <span>Var: {formatCurrency(metrics.variableExpenses)}</span>
+            <span>Variáveis: {formatCurrency(metrics.variableExpenses)}</span>
           </div>
         </div>
 
         {/* Net Cash Flow */}
         <div className="p-4 rounded-xl border border-[#1e2634] bg-[#0f1319] hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Superávit Líquido</span>
+            <span>Sobra Mensal</span>
             <div className="p-1 rounded bg-blue-500/10 text-blue-400">
               <TrendingUp className="w-4 h-4" />
             </div>
@@ -94,16 +94,16 @@ export function DashboardView({
             {formatCurrency(metrics.netCashFlow)}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
-            Taxa de Poupança: <span className="font-semibold text-white">{metrics.savingsRatePct}%</span>
+            Poupança: <span className="font-semibold text-white">{metrics.savingsRatePct}% da renda</span>
           </div>
         </div>
 
         {/* Runway */}
         <div className="p-4 rounded-xl border border-[#1e2634] bg-[#0f1319] hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Cobertura de Sobrevivência (Runway)</span>
+            <span>Meses de Caixa Coberto</span>
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-              {metrics.runwayMonths >= 6 ? 'Excelente' : 'Atenção'}
+              {metrics.runwayMonths >= 6 ? 'Tranquilo' : 'Apertado'}
             </span>
           </div>
           <div className="text-xl font-bold font-mono text-white tabular-nums">
@@ -116,7 +116,7 @@ export function DashboardView({
             />
           </div>
           <div className="text-[10px] text-slate-400 mt-1">
-            Meta Nível {metrics.maturityLevel <= 2 ? '2' : '3'}: 6 meses ({formatCurrency(metrics.fixedExpenses * 6)})
+            Custo fixo 6 meses: {formatCurrency(metrics.fixedExpenses * 6)}
           </div>
         </div>
       </div>
@@ -136,10 +136,10 @@ export function DashboardView({
               </div>
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400 font-mono">
-                  Diagnóstico FinAI (Gemini Flash)
+                  Diagnóstico do Mês
                 </span>
                 <span className="ml-2 text-[10px] text-slate-400 font-mono">
-                  Modelo: {diagnosis?.modelUsed || 'gemini-flash-lite'}
+                  {diagnosis?.modelUsed || 'gemini-flash-lite'}
                 </span>
               </div>
             </div>
@@ -152,17 +152,17 @@ export function DashboardView({
 
           {/* Headline & Summary */}
           <h3 className="text-base font-bold text-white mb-2">
-            {diagnosis?.headline || 'Seu Plano de Otimização Financeira'}
+            {diagnosis?.headline || 'Avaliação de Liquidez e Gastos'}
           </h3>
           <p className="text-xs text-slate-300 leading-relaxed mb-4">
-            {diagnosis?.summary || 'Nenhuma análise gerada ainda. Clique em "Diagnóstico IA" para avaliar seu mês atual.'}
+            {diagnosis?.summary || 'Clique em "Diagnóstico IA" para avaliar o fechamento parcial deste mês.'}
           </p>
 
           {/* Priority Actions */}
           {diagnosis?.priorityActions && diagnosis.priorityActions.length > 0 && (
             <div className="space-y-2 mb-4">
               <div className="text-[11px] font-mono uppercase text-slate-400 tracking-wider">
-                Ações Prioritárias Recomendadas:
+                Ajustes Práticos:
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {diagnosis.priorityActions.map((action: any, i: number) => (
@@ -185,13 +185,13 @@ export function DashboardView({
             <div className="pt-3 border-t border-[#1e2634] flex items-center justify-between text-xs">
               <span className="text-slate-400 flex items-center gap-1.5">
                 <Target className="w-3.5 h-3.5 text-blue-400" />
-                Próximo Marco: <span className="text-slate-200 font-medium">{diagnosis.nextMilestone}</span>
+                Meta Imediata: <span className="text-slate-200 font-medium">{diagnosis.nextMilestone}</span>
               </span>
               <button
                 onClick={onOpenAIDiagnosis}
                 className="text-xs text-emerald-400 hover:text-emerald-300 font-medium underline underline-offset-4"
               >
-                Atualizar Diagnóstico
+                Recalcular
               </button>
             </div>
           )}
@@ -204,47 +204,47 @@ export function DashboardView({
               <div className="p-1.5 rounded-lg bg-teal-500/10 text-teal-400 border border-teal-500/20">
                 <Cpu className="w-4 h-4" />
               </div>
-              <div className="text-xs font-bold text-white">Eficiência de Tokens</div>
+              <div className="text-xs font-bold text-white">Controle de Tokens</div>
             </div>
 
             <div className="space-y-3 text-xs">
               <div className="p-3 rounded-lg bg-[#141822] border border-[#1e2634]">
                 <div className="flex items-center justify-between text-[11px] mb-1">
-                  <span className="text-slate-400">Matemática Financeira</span>
+                  <span className="text-slate-400">Motor Determinístico</span>
                   <span className="text-emerald-400 font-mono font-bold">0 Tokens</span>
                 </div>
                 <div className="text-[10px] text-slate-400">
-                  Somas, médias, desvios e limites são processados localmente em TypeScript.
+                  Somas e desvios rodam no servidor local; custo zero de API.
                 </div>
               </div>
 
               <div className="p-3 rounded-lg bg-[#141822] border border-[#1e2634]">
                 <div className="flex items-center justify-between text-[11px] mb-1">
-                  <span className="text-slate-400">Contexto Enviado ao LLM</span>
+                  <span className="text-slate-400">Carga do Prompt</span>
                   <span className="text-blue-400 font-mono font-bold">&lt; 180 Tokens</span>
                 </div>
                 <div className="text-[10px] text-slate-400">
-                  Extratos de 100+ linhas são comprimidos em um <em>Synthetic Financial Snapshot</em>.
+                  O modelo recebe apenas o resumo consolidado do mês, sem despejar centenas de linhas de extrato.
                 </div>
               </div>
 
               <div className="p-3 rounded-lg bg-[#141822] border border-[#1e2634]">
                 <div className="flex items-center justify-between text-[11px] mb-1">
-                  <span className="text-slate-400">Tokens Gastos no Último Diagnóstico</span>
+                  <span className="text-slate-400">Gasto da Última Chamada</span>
                   <span className="text-purple-400 font-mono font-bold">
                     {diagnosis?.tokenCount || 215} tokens
                   </span>
                 </div>
                 <div className="text-[10px] text-slate-400">
-                  Economia de ~94% comparado a enviar extratos brutos.
+                  Menos de meio centavo por análise completa.
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="text-[10px] text-slate-400 pt-3 border-t border-[#1e2634] flex items-center justify-between">
-            <span>Privacidade: Anonimizado</span>
-            <span className="text-emerald-400">Zero vazamento de dados</span>
+          <div className="text-[10px] text-slate-500 pt-3 border-t border-[#1e2634] flex items-center justify-between">
+            <span>Privacidade local</span>
+            <span className="text-slate-400">Extrato bruto não sai da máquina</span>
           </div>
         </div>
       </div>

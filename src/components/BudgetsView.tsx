@@ -58,12 +58,12 @@ export function BudgetsView({ metrics, categories, onUpdateCategoryBudget }: Bud
             Controle de Orçamentos por Categoria (Envelopes)
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Defina tetos mensais para suas despesas essenciais e variáveis. O motor determinístico monitora desvios sem queimar tokens.
+            Tetos por envelope. As barras mostram o consumo acumulado no mês contra o limite definido.
           </p>
         </div>
         <div className="flex items-center gap-4 text-xs font-mono">
           <div className="p-2.5 rounded-lg bg-[#12161f] border border-[#1e2634]">
-            <span className="text-slate-400">Total Orçado: </span>
+            <span className="text-slate-400">Teto Total: </span>
             <span className="text-white font-bold">
               {formatCurrency(categories.reduce((acc, c) => acc + (c.budgetLimit || 0), 0))}
             </span>
@@ -76,7 +76,7 @@ export function BudgetsView({ metrics, categories, onUpdateCategoryBudget }: Bud
         <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-xs">
           <div className="flex items-center gap-2 font-bold text-rose-400 mb-2">
             <AlertTriangle className="w-4 h-4" />
-            <span>Alertas de Estouro de Orçamento Detectados no Mês:</span>
+            <span>Categorias com teto estourado em outubro:</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {metrics.budgetDeviations

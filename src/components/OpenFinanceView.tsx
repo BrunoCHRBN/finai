@@ -48,13 +48,13 @@ export function OpenFinanceView({
         <div>
           <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 mb-1">
             <ShieldCheck className="w-4 h-4" />
-            <span>Open Finance Brasil • Pluggy Aggregator</span>
+            <span>Open Finance Brasil via Pluggy</span>
           </div>
           <h2 className="text-lg font-bold text-white">
-            Conexão Bancária & Sincronização Automática
+            Contas Conectadas e Sincronização
           </h2>
           <p className="text-xs text-slate-300 mt-1 max-w-xl">
-            Seus dados são transmitidos via conexão criptografada de ponta a ponta regulamentada pelo Banco Central do Brasil.
+            Conexão direta com seus bancos via Pluggy. Os extratos alimentam o cálculo local e nenhuma senha fica salva no aplicativo.
           </p>
         </div>
 

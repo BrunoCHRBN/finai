@@ -29,30 +29,43 @@ export function CopilotView({ metrics, diagnosis, onRunDiagnosis, isGenerating }
   const maturityLevels = [
     {
       level: 1,
-      title: 'Sobrevivência & Estabilização',
-      goal: 'Estancar vazamentos, quitar dívidas de alto custo e criar o primeiro colchão de R$ 1.000 a 1 mês.',
-      milestones: ['Runway < 1 mês', 'Fluxo de caixa apertado', 'Foco em corte de gargalos'],
+      title: 'Estabilização de Caixa',
+      goal: 'Estancar juros de cartão e montar o primeiro colchão de emergência de R$ 1.000.',
+      milestones: [
+        'Caixa líquido menor que 30 dias de contas',
+        'Parcelamentos com juros comendo a renda',
+      ],
       color: 'border-amber-500/30 bg-amber-500/5 text-amber-400',
     },
     {
       level: 2,
       title: 'Construção da Base',
-      goal: 'Completar 3 a 6 meses de reserva de emergência em liquidez imediata e estabilizar a Taxa de Poupança acima de 20%.',
-      milestones: ['Runway de 1 a 5 meses', 'Orçamento previsível', 'Reserva de emergência ativa'],
+      goal: 'Guardar de 3 a 6 meses de contas fixas em aplicação com liquidez diária e manter taxa de poupança acima de 20%.',
+      milestones: [
+        'Reserva entre 1 e 5 meses de custo fixo',
+        'Despesas fixas mapeadas sem surpresas',
+        'Zero dívidas caras abertas',
+        'Poupança mensal consistente',
+      ],
       color: 'border-blue-500/30 bg-blue-500/5 text-blue-400',
     },
     {
       level: 3,
-      title: 'Acumulador Ativo',
-      goal: 'Diversificação de patrimônio, aportes automáticos mensais em Renda Fixa e Variável, foco em custo de oportunidade.',
-      milestones: ['Runway >= 6 meses', 'Taxa de poupança consistente > 20%', 'Investimento recorrente'],
+      title: 'Acúmulo de Capital',
+      goal: 'Aporte regular todo início de mês; divisão entre títulos públicos e renda variável sem inventar moda.',
+      milestones: [
+        'Mais de 6 meses de contas cobertas',
+        'Aportes mensais automáticos',
+      ],
       color: 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400',
     },
     {
       level: 4,
-      title: 'Investidor Consolidado',
-      goal: 'Eficiência fiscal, reinvestimento de dividendos e renda passiva cobrindo despesas essenciais.',
-      milestones: ['Patrimônio gerando renda passiva', 'Gestão de risco de cauda', 'Blindagem patrimonial'],
+      title: 'Consolidação & Risco',
+      goal: 'Proventos cobrindo despesas correntes; foco em preservação contra inflação e eficiência fiscal.',
+      milestones: [
+        'Renda passiva cobrindo o custo fixo mensal',
+      ],
       color: 'border-purple-500/30 bg-purple-500/5 text-purple-400',
     },
   ];
@@ -64,13 +77,13 @@ export function CopilotView({ metrics, diagnosis, onRunDiagnosis, isGenerating }
         <div>
           <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 mb-1">
             <Sparkles className="w-4 h-4" />
-            <span>Mentor Financeiro Adaptativo (Token-Light Architecture)</span>
+            <span>Mentor Financeiro Contextual</span>
           </div>
           <h2 className="text-lg font-bold text-white">
-            Trilha de Evolução Patrimonial por Níveis
+            Evolução por Nível de Liquidez
           </h2>
           <p className="text-xs text-slate-300 mt-1 max-w-xl">
-            A IA não te dá conselhos genéricos. Suas recomendações mudam radicalmente conforme você sobe de nível, do estancamento de sangrias até a alocação avançada.
+            O que faz sentido para quem deve no cartão não serve para quem tem seis meses de contas pagas guardadas; as prioridades mudam com o tamanho da sua folga.
           </p>
         </div>
 
@@ -80,7 +93,7 @@ export function CopilotView({ metrics, diagnosis, onRunDiagnosis, isGenerating }
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50"
         >
           <Sparkles className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-          <span>{isGenerating ? 'Gerando Diagnóstico...' : 'Rodar Novo Diagnóstico'}</span>
+          <span>{isGenerating ? 'Calculando...' : 'Atualizar Leitura de Caixa'}</span>
         </button>
       </div>
 

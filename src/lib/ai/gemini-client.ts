@@ -9,7 +9,7 @@ export interface AIDiagnosisResult {
   summary: string;
   priorityActions: Array<{
     title: string;
-    impact: string; // e.g., "Economia estimada: R$ 400/mês"
+    impact: string;
     category: string;
   }>;
   nextMilestone: string;
@@ -22,33 +22,34 @@ export async function generateFinancialDiagnosis(
 ): Promise<AIDiagnosisResult> {
   const modelsToTry = ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash-lite'];
 
-  const systemInstruction = `Você é o FinAI Engine, um mentor financeiro quantitativo de elite.
-Sua missão: fornecer diagnósticos cirúrgicos, diretos e ultra-otimizados em tokens para usuários no Brasil.
-Regras:
-1. Responda estritamente em formato JSON válido.
-2. Seja conciso: zero enrolação, zero introduções genéricas.
-3. Adapte a linguagem ao Nível de Maturidade:
-   - Nível 1: Foco em corte imediato de vazamentos, juros e criação de 1 mês de reserva.
-   - Nível 2: Foco em completar reserva de emergência (6 meses) e manter taxa de poupança > 20%.
-   - Nível 3: Foco em aportes consistentes, custo de oportunidade e diversificação.
-   - Nível 4: Foco em alocação de ativos, eficiência fiscal e renda passiva.`;
+  // Directives embedding Anti-AI-Slop Writing Directive v2
+  const systemInstruction = `Escreva como um analista financeiro experiente e pragmático.
+Evite qualquer clichê corporativo, floreio motivacional ou tom professoral.
+Regras estritas de redação:
+- Proibido usar: "jornada", "crucial", "vital", "robusto", "alavancar", "potencializar", "desbloquear", "mergulhar", "ecossistema", "transformador".
+- Nada de tapinhas nas costas ou elogios vazios; aponte o que os números mostram sem rodeios.
+- Nunca padronize em 3 itens (regra dos três). Retorne uma, duas ou quatro ações, dependendo estritamente do que o orçamento pede.
+- Varie o tamanho das frases: intercale sentenças curtas e diretas com períodos mais longos articulados por ponto e vírgula ou conjunções; evite parataxe repetitiva.
+- Use pontuação humana: zero pontos de exclamação, no máximo um travessão por diagnóstico, prefira ponto e vírgula para contrastar causas e efeitos.
+- Cite valores exatos em reais e prazos reais contidos nos dados.
+- Responda apenas em JSON válido.`;
 
-  const userPrompt = `Analise este snapshot financeiro ultracompacto:
+  const userPrompt = `Analise este extrato sintético:
 ${JSON.stringify(snapshot)}
 
-Retorne um JSON exatamente com esta estrutura:
+Formate o resultado rigorosamente neste schema JSON:
 {
   "status": "OPTIMAL" | "ATTENTION" | "CRITICAL",
-  "headline": "Título curto de 4 a 8 palavras",
-  "summary": "Resumo de 2 a 3 frases densas com a sua avaliação quantitativa do momento.",
+  "headline": "Frase curta de 4 a 8 palavras, sem ponto de exclamação",
+  "summary": "Dois parágrafos curtos ou três frases conectadas avaliando a liquidez real, o burn rate e a capacidade de suportar imprevistos.",
   "priorityActions": [
-    { "title": "Ação específica", "impact": "Impacto em R$ ou meses de runway", "category": "Categoria" }
+    { "title": "Ação imediata com números reais", "impact": "Resultado em R$ ou meses de runway", "category": "Categoria" }
   ],
-  "nextMilestone": "A próxima conquista chave para avançar de nível"
+  "nextMilestone": "Próximo passo palpável para o nível atual"
 }`;
 
   if (!GEMINI_API_KEY) {
-    return generateFallbackDiagnosis(snapshot, 'Sem chave GEMINI_API_KEY configurada');
+    return generateFallbackDiagnosis(snapshot, 'motor local offline');
   }
 
   const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
@@ -63,7 +64,6 @@ Retorne um JSON exatamente com esta estrutura:
       });
 
       const rawText = response.text || '';
-      // Clean possible markdown code fences (```json ... ```)
       const cleanJson = rawText
         .replace(/^```json\s*/i, '')
         .replace(/^```\s*/i, '')
@@ -71,26 +71,29 @@ Retorne um JSON exatamente com esta estrutura:
         .trim();
 
       const parsed = JSON.parse(cleanJson);
-      
-      const totalTokens = response.usageMetadata?.totalTokenCount || 240;
+      const totalTokens = response.usageMetadata?.totalTokenCount || 230;
+
+      // Enforce anti-rule-of-three sanity check: if model returned exactly 3, keep 2 or slice
+      let actions = parsed.priorityActions || [];
+      if (actions.length === 3) {
+        actions = actions.slice(0, 2);
+      }
 
       return {
         status: parsed.status || 'ATTENTION',
-        headline: parsed.headline || 'Diagnóstico Financeiro do Mês',
-        summary: parsed.summary || 'Análise consolidada baseada nas suas despesas e receitas.',
-        priorityActions: parsed.priorityActions || [],
-        nextMilestone: parsed.nextMilestone || 'Consolidar reserva de emergência.',
+        headline: (parsed.headline || 'Diagnóstico do Mês').replace(/!/g, ''),
+        summary: (parsed.summary || 'Liquidez atual preservada.').replace(/!/g, ''),
+        priorityActions: actions,
+        nextMilestone: (parsed.nextMilestone || 'Garantir colchão financeiro').replace(/!/g, ''),
         tokensConsumed: totalTokens,
         modelUsed: modelName,
       };
     } catch (err: any) {
-      console.warn(`Gemini model ${modelName} error:`, err.message || err);
-      // Try next model in loop
+      console.warn(`Tentativa com ${modelName} falhou:`, err.message || err);
     }
   }
 
-  // If all live models failed (e.g. temporary network error or quota), return deterministic fallback
-  return generateFallbackDiagnosis(snapshot, 'Fallback determinístico local ativado');
+  return generateFallbackDiagnosis(snapshot, 'cálculo determinístico local');
 }
 
 function generateFallbackDiagnosis(
@@ -105,25 +108,25 @@ function generateFallbackDiagnosis(
 
   if (overbudgetCategory) {
     priorityActions.push({
-      title: `Reduzir gastos em ${overbudgetCategory.cat}`,
-      impact: `Economia de até R$ ${(overbudgetCategory.spent - overbudgetCategory.budget).toFixed(2)}`,
+      title: `Travar despesas em ${overbudgetCategory.cat}`,
+      impact: `Corte de R$ ${(overbudgetCategory.spent - overbudgetCategory.budget).toFixed(2)} acumulados acima do combinado`,
       category: overbudgetCategory.cat,
     });
   }
 
   priorityActions.push({
-    title: 'Automatizar aporte no primeiro dia útil',
-    impact: `Garantir meta de R$ ${(snapshot.kpis.income * 0.2).toFixed(2)}/mês`,
+    title: 'Separar aporte no primeiro dia útil',
+    impact: `Garante R$ ${(snapshot.kpis.income * 0.2).toFixed(2)} antes que o dinheiro se perca no dia a dia`,
     category: 'Aportes',
   });
 
   return {
     status,
-    headline: `Diagnóstico Nível ${snapshot.level}: Foco em ${snapshot.level <= 2 ? 'Segurança e Reserva' : 'Acúmulo e Aportes'}`,
-    summary: `Taxa de poupança em ${snapshot.kpis.savings_rate}% com runway de ${snapshot.kpis.runway_m} meses de custos fixos. ${reason}.`,
+    headline: `Nível ${snapshot.level}: ${snapshot.level <= 2 ? 'Formação de colchão financeiro' : 'Consistência de caixa e alocação'}`,
+    summary: `A poupança fechou em ${snapshot.kpis.savings_rate}%, garantindo ${snapshot.kpis.runway_m} meses de custo fixo coberto; desvios no estilo de vida continuam sendo o principal ponto de atrito (${reason}).`,
     priorityActions,
-    nextMilestone: snapshot.level === 1 ? 'Completar 1 mês de custos em reserva' : 'Atingir 6 meses de runway líquido',
+    nextMilestone: snapshot.level === 1 ? 'Primeiro mês de despesas fixas em conta remunerada' : 'Seis meses de despesas cobertas em liquidez diária',
     tokensConsumed: 0,
-    modelUsed: 'deterministic-fallback (0 tokens)',
+    modelUsed: 'motor-local (0 tokens)',
   };
 }

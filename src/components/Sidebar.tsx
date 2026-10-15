@@ -30,10 +30,10 @@ export function Sidebar({ currentTab, onSelectTab, maturityLevel, tokenCount }: 
   ];
 
   const levelNames: Record<number, { name: string; color: string; desc: string }> = {
-    1: { name: 'Nível 1 • Estabilização', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20', desc: 'Reserva e corte de gargalos' },
-    2: { name: 'Nível 2 • Construção da Base', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20', desc: 'Reserva de 6m e consistência' },
-    3: { name: 'Nível 3 • Acumulador Ativo', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', desc: 'Aportes e diversificação' },
-    4: { name: 'Nível 4 • Investidor Consolidado', color: 'text-purple-400 bg-purple-500/10 border-purple-500/20', desc: 'Eficiência fiscal e alfa' },
+    1: { name: 'Nível 1: Estabilização', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20', desc: 'Colchão mínimo de R$ 1.000 e corte de rotativo' },
+    2: { name: 'Nível 2: Base Concluída', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20', desc: 'Reserva de 6 meses; taxa de poupança acima de 20%' },
+    3: { name: 'Nível 3: Acumulador', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', desc: 'Aportes regulares sem perder para a inflação' },
+    4: { name: 'Nível 4: Investidor', color: 'text-purple-400 bg-purple-500/10 border-purple-500/20', desc: 'Patrimônio gerando renda; foco em risco e custo' },
   };
 
   const levelInfo = levelNames[maturityLevel] || levelNames[2];
@@ -51,7 +51,7 @@ export function Sidebar({ currentTab, onSelectTab, maturityLevel, tokenCount }: 
               <div className="font-bold text-sm tracking-tight text-white flex items-center gap-1.5">
                 FinAI <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono font-medium border border-emerald-500/30">DESKTOP</span>
               </div>
-              <div className="text-[11px] text-slate-400">Inteligência Financeira</div>
+              <div className="text-[11px] text-slate-400">Controle de Caixa & Patrimônio</div>
             </div>
           </div>
         </div>
@@ -102,27 +102,27 @@ export function Sidebar({ currentTab, onSelectTab, maturityLevel, tokenCount }: 
         {/* Token Efficiency Meter */}
         <div className="p-2.5 rounded-lg bg-[#12161f] border border-[#1e2634] text-xs">
           <div className="flex items-center justify-between text-[11px] mb-1">
-            <span className="text-slate-400 font-medium">Consumo de IA</span>
-            <span className="text-emerald-400 font-mono font-semibold">Ultra-Enxuto</span>
+            <span className="text-slate-400 font-medium">Chamada LLM</span>
+            <span className="text-emerald-400 font-mono font-medium">Apenas raciocínio</span>
           </div>
           <div className="w-full bg-slate-800 rounded-full h-1.5 mb-1.5 overflow-hidden">
             <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: '12%' }} />
           </div>
-          <div className="text-[10px] text-slate-400 flex items-center justify-between">
-            <span>Último diagnóstico:</span>
-            <span className="font-mono text-slate-200">{tokenCount > 0 ? `${tokenCount} tokens` : '0 tokens'}</span>
+          <div className="text-[10px] text-slate-400 flex items-center justify-between font-mono">
+            <span>Última consulta:</span>
+            <span className="text-slate-200">{tokenCount > 0 ? `${tokenCount} tokens` : '0 tokens'}</span>
           </div>
-          <div className="text-[9px] text-emerald-400/90 mt-1">
-            ✓ 100% das contas feitas no motor local (0 tokens)
+          <div className="text-[10px] text-slate-400 mt-1 leading-tight">
+            Contas somadas no TypeScript local; a IA não faz aritmética.
           </div>
         </div>
 
         {/* Keyboard shortcut hint */}
-        <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
-          <span className="flex items-center gap-1 font-mono">
+        <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 font-mono">
+          <span className="flex items-center gap-1">
             <Command className="w-3 h-3" /> + K
           </span>
-          <span className="text-[10px]">Ações rápidas</span>
+          <span className="text-[10px] text-slate-500">Paleta de comandos</span>
         </div>
       </div>
     </aside>
