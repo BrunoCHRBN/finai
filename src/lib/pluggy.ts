@@ -132,19 +132,13 @@ export async function getPluggyAccounts(itemId: string) {
  */
 export async function getPluggyTransactions(params: {
   accountId?: string;
-  from?: string;
-  to?: string;
-  page?: number;
-  pageSize?: number;
+  cursor?: string;
 }) {
   const apiKey = await getPluggyApiKey();
-  const url = new URL(`${PLUGGY_BASE_URL}/transactions`);
+  const url = new URL(`${PLUGGY_BASE_URL}/v2/transactions`);
 
   if (params.accountId) url.searchParams.set('accountId', params.accountId);
-  if (params.from) url.searchParams.set('from', params.from);
-  if (params.to) url.searchParams.set('to', params.to);
-  if (params.page) url.searchParams.set('page', params.page.toString());
-  if (params.pageSize) url.searchParams.set('pageSize', params.pageSize.toString());
+  if (params.cursor) url.searchParams.set('after', params.cursor);
 
   const response = await fetch(url.toString(), {
     method: 'GET',

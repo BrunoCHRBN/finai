@@ -126,49 +126,6 @@ export async function ensureDbInitialized() {
         args: [c.id, c.name, c.group, c.color, c.icon, c.budgetLimit],
       });
     }
-
-    // Seed default starter accounts
-    await client.execute({
-      sql: `INSERT INTO accounts (id, name, type, balance, currency_code, institution_name, color, updated_at) 
-            VALUES ('acc-nubank', 'Nubank Conta Principal', 'CHECKING', 4850.20, 'BRL', 'Nubank', '#820ad1', datetime('now')),
-                   ('acc-itau', 'Itaú Personalité', 'CHECKING', 12340.50, 'BRL', 'Itaú', '#ec7000', datetime('now')),
-                   ('acc-xp', 'XP Investimentos', 'INVESTMENT', 45000.00, 'BRL', 'XP', '#1e293b', datetime('now')),
-                   ('acc-nubank-card', 'Cartão Nubank Ultravioleta', 'CREDIT_CARD', -2850.40, 'BRL', 'Nubank', '#820ad1', datetime('now'))`,
-      args: [],
-    });
-
-    // Seed realistic current month transactions (2026-10)
-    const seedTransactions = [
-      { id: 'tx-1', accountId: 'acc-itau', categoryId: 'cat-salario', description: 'TED Recebida - Salário Mensal', amount: 14500.00, date: '2026-10-05', type: 'CREDIT' },
-      { id: 'tx-2', accountId: 'acc-itau', categoryId: 'cat-moradia', description: 'PIX Aluguel + Condomínio', amount: -2850.00, date: '2026-10-06', type: 'DEBIT' },
-      { id: 'tx-3', accountId: 'acc-nubank', categoryId: 'cat-supermercado', description: 'Pão de Açúcar Morumbi', amount: -642.30, date: '2026-10-07', type: 'DEBIT' },
-      { id: 'tx-4', accountId: 'acc-nubank-card', categoryId: 'cat-restaurantes', description: 'iFood Brasil Delivery', amount: -89.90, date: '2026-10-08', type: 'DEBIT' },
-      { id: 'tx-5', accountId: 'acc-nubank-card', categoryId: 'cat-restaurantes', description: 'Outback Steakhouse', amount: -245.00, date: '2026-10-10', type: 'DEBIT' },
-      { id: 'tx-6', accountId: 'acc-nubank-card', categoryId: 'cat-transporte', description: 'Uber Rides *BR', amount: -38.50, date: '2026-10-11', type: 'DEBIT' },
-      { id: 'tx-7', accountId: 'acc-nubank', categoryId: 'cat-contas', description: 'Enel Energia Elétrica', amount: -210.40, date: '2026-10-12', type: 'DEBIT' },
-      { id: 'tx-8', accountId: 'acc-nubank', categoryId: 'cat-contas', description: 'Vivo Fibra Internet 600M', amount: -149.90, date: '2026-10-12', type: 'DEBIT' },
-      { id: 'tx-9', accountId: 'acc-nubank-card', categoryId: 'cat-assinaturas', description: 'Netflix / Spotify / Claude', amount: -165.00, date: '2026-10-13', type: 'DEBIT' },
-      { id: 'tx-10', accountId: 'acc-itau', categoryId: 'cat-investimentos', description: 'Aplicação Tesouro Selic 2029', amount: -3500.00, date: '2026-10-14', type: 'DEBIT' },
-      { id: 'tx-11', accountId: 'acc-nubank-card', categoryId: 'cat-restaurantes', description: 'iFood Brasil Delivery', amount: -112.40, date: '2026-10-14', type: 'DEBIT' },
-      { id: 'tx-12', accountId: 'acc-nubank', categoryId: 'cat-supermercado', description: 'Carrefour Express', amount: -178.60, date: '2026-10-15', type: 'DEBIT' },
-    ];
-
-    for (const t of seedTransactions) {
-      await client.execute({
-        sql: `INSERT INTO transactions (id, account_id, category_id, description, amount, date, type, status, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, 'SETTLED', datetime('now'))`,
-        args: [t.id, t.accountId, t.categoryId, t.description, t.amount, t.date, t.type],
-      });
-    }
-
-    // Seed starter goals
-    await client.execute({
-      sql: `INSERT INTO goals (id, title, target_amount, current_amount, deadline, category, color)
-            VALUES ('goal-reserva', 'Reserva de Emergência (6 Meses)', 45000.00, 31200.00, '2026-12-31', 'EMERGENCY', '#10b981'),
-                   ('goal-invest', 'Meta Aporte Anual Ações/FIIs', 50000.00, 38500.00, '2026-12-31', 'INVESTMENT', '#3b82f6'),
-                   ('goal-viagem', 'Férias Japão 2027', 25000.00, 9500.00, '2027-05-01', 'MILESTONE', '#a855f7')`,
-      args: [],
-    });
   }
 
   initialized = true;

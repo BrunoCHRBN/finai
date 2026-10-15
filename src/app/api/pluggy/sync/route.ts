@@ -87,7 +87,7 @@ export async function POST(request: Request) {
       accountsSynced++;
 
       // 2. Fetch Transactions for this account
-      const pTxs = await getPluggyTransactions({ accountId: pAcc.id, pageSize: 50 });
+      const pTxs = await getPluggyTransactions({ accountId: pAcc.id });
       for (const pTx of pTxs) {
         const txId = `pluggy-tx-${pTx.id}`;
         const existingTx = await db.select().from(transactions).where(eq(transactions.id, txId));
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
             description: pTx.description || 'Transação Open Finance',
             amount: pTx.amount || 0,
             date: pTx.date ? pTx.date.split('T')[0] : new Date().toISOString().split('T')[0],
-            type: pTx.amount < 0 ? 'DEBIT' : 'CREDIT',
+            type: pTx.type === 'CREDIT' ? 'CREDIT' : 'DEBIT',
             status: pTx.status || 'SETTLED',
             pluggyTransactionId: pTx.id,
             createdAt: new Date().toISOString(),
