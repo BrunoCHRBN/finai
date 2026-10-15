@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Plus, Calendar, DollarSign, Tag, Landmark } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 
 interface NewTransactionModalProps {
   isOpen: boolean;
@@ -60,49 +60,73 @@ export function NewTransactionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#242823]/40 backdrop-blur-sm animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div 
-        className="w-full max-w-md rounded-2xl border border-[#1e2634] bg-[#0c0f14] shadow-2xl overflow-hidden"
+        className="w-full max-w-md rounded-xl border border-[#E7E1D7] bg-[#FFFFFF] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 py-4 border-b border-[#1e2634] flex items-center justify-between">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Plus className="w-4 h-4 text-emerald-400" />
-            Registrar Nova Transação
-          </h3>
-          <button onClick={onClose} className="p-1 rounded text-slate-400 hover:text-white">
+        {/* Modal Header */}
+        <div className="px-5 py-4 border-b border-[#E7E1D7] flex items-center justify-between bg-[#FAF8F5]">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-md bg-[#253A32] text-white flex items-center justify-center">
+              <Plus className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-[#242823]">
+                Lançamento Manual de Transação
+              </h3>
+              <p className="text-[10px] text-[#777A72] font-mono">
+                Extrato auxiliar com conciliação imediata
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose} 
+            className="p-1 rounded-md text-[#777A72] hover:text-[#242823] hover:bg-[#E7E1D7]/50 transition-colors cursor-pointer"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
           {/* Type Toggle: Despesa vs Receita */}
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#12161f] border border-[#1e2634]">
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[#F0EDE6] border border-[#E7E1D7]">
             <button
               type="button"
               onClick={() => setIsExpense(true)}
-              className={`py-2 rounded-lg font-bold transition-all ${
-                isExpense ? 'bg-rose-500 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              className={`py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                isExpense 
+                  ? 'bg-[#963F36] text-white shadow-sm' 
+                  : 'text-[#5F635C] hover:text-[#242823]'
               }`}
             >
-              Despesa (Saída)
+              Despesa Operacional (Débito)
             </button>
             <button
               type="button"
               onClick={() => setIsExpense(false)}
-              className={`py-2 rounded-lg font-bold transition-all ${
-                !isExpense ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+              className={`py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                !isExpense 
+                  ? 'bg-[#253A32] text-white shadow-sm' 
+                  : 'text-[#5F635C] hover:text-[#242823]'
               }`}
             >
-              Receita (Entrada)
+              Receita / Entrada (Crédito)
             </button>
           </div>
 
           {/* Amount */}
           <div>
-            <label className="block text-slate-400 font-mono mb-1 text-[11px]">VALOR (R$)</label>
+            <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
+              Valor Nominal (R$)
+            </label>
             <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-bold">R$</span>
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#777A72] font-mono font-semibold">
+                R$
+              </span>
               <input
                 type="number"
                 step="0.01"
@@ -110,7 +134,7 @@ export function NewTransactionModal({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0,00"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#12161f] border border-[#1e2634] text-white font-mono text-base font-bold focus:outline-none focus:border-emerald-500"
+                className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] font-mono text-base font-bold focus:outline-none focus:border-[#253A32] focus:ring-1 focus:ring-[#253A32]/20"
                 autoFocus
               />
             </div>
@@ -118,25 +142,29 @@ export function NewTransactionModal({
 
           {/* Description */}
           <div>
-            <label className="block text-slate-400 font-mono mb-1 text-[11px]">DESCRIÇÃO</label>
+            <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
+              Descrição do Lançamento
+            </label>
             <input
               type="text"
               required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ex: Almoço Restaurante, Assinatura Netflix, Freelance..."
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[#12161f] border border-[#1e2634] text-white focus:outline-none focus:border-emerald-500"
+              placeholder="Ex: Aluguel Comercial, Honorários, Supermercado..."
+              className="w-full px-3.5 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] focus:outline-none focus:border-[#253A32] focus:ring-1 focus:ring-[#253A32]/20 text-xs"
             />
           </div>
 
           {/* Account & Category */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-slate-400 font-mono mb-1 text-[11px]">CONTA / CARTÃO</label>
+              <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
+                Conta de Destino
+              </label>
               <select
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-[#12161f] border border-[#1e2634] text-white focus:outline-none focus:border-emerald-500 font-mono"
+                className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] focus:outline-none focus:border-[#253A32] font-mono text-xs cursor-pointer"
               >
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -147,11 +175,13 @@ export function NewTransactionModal({
             </div>
 
             <div>
-              <label className="block text-slate-400 font-mono mb-1 text-[11px]">CATEGORIA</label>
+              <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
+                Categoria Contábil
+              </label>
               <select
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-[#12161f] border border-[#1e2634] text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] focus:outline-none focus:border-[#253A32] text-xs cursor-pointer"
               >
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -164,13 +194,15 @@ export function NewTransactionModal({
 
           {/* Date */}
           <div>
-            <label className="block text-slate-400 font-mono mb-1 text-[11px]">DATA</label>
+            <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
+              Data de Competência
+            </label>
             <input
               type="date"
               required
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl bg-[#12161f] border border-[#1e2634] text-white font-mono focus:outline-none focus:border-emerald-500"
+              className="w-full px-3.5 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] font-mono focus:outline-none focus:border-[#253A32] text-xs"
             />
           </div>
 
@@ -179,9 +211,9 @@ export function NewTransactionModal({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+              className="w-full py-2.5 rounded-lg bg-[#253A32] hover:bg-[#1C2C26] text-white font-semibold text-xs transition-all shadow-sm disabled:opacity-50 cursor-pointer"
             >
-              {isLoading ? 'Salvando...' : 'Confirmar Lançamento'}
+              {isLoading ? 'Registrando...' : 'Confirmar Lançamento'}
             </button>
           </div>
         </form>

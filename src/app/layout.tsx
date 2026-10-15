@@ -1,29 +1,38 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Serif_Display, Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmSerif = DM_Serif_Display({
+  weight: "400",
+  variable: "--font-serif",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "FinAI • Terminal Financeiro & IA",
-  description: "Plataforma financeira desktop-first com IA integrada ultra-otimizada em tokens e Open Finance Pluggy.",
+  title: "FinAI • Terminal Financeiro Institucional",
+  description: "Plataforma editorial de inteligência patrimonial, Open Finance e IA com consumo ultra-otimizado de tokens.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="pt-BR"
+      className={`${dmSerif.variable} ${inter.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full font-sans bg-[var(--canvas)] text-[var(--text-primary)] antialiased flex flex-col">
+        {children}
+      </body>
     </html>
   );
 }

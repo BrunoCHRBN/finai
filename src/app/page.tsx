@@ -95,9 +95,8 @@ export default function Home() {
   const handleSyncPluggy = async (itemId?: string) => {
     setIsSyncingPluggy(true);
     try {
-      // If no itemId provided, use a default item or simulate sync
       const targetItemId = itemId || 'item-pluggy-sync';
-      const res = await fetch('/api/pluggy/sync', {
+      await fetch('/api/pluggy/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ itemId: targetItemId }),
@@ -129,7 +128,11 @@ export default function Home() {
     const res = await fetch('/api/budgets', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categoryId, budgetLimit: newLimit }),
+      body: JSON.stringify({
+        month: currentMonth,
+        categoryId,
+        plannedAmount: newLimit,
+      }),
     });
     if (!res.ok) {
       const err = await res.json();
@@ -138,17 +141,18 @@ export default function Home() {
     await loadFinancialData();
   };
 
+  // Loading State
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#090b0e] flex flex-col items-center justify-center text-slate-400 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-        <span className="text-xs font-mono">Carregando FinAI Platform...</span>
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#F6F3ED] text-[#242823] gap-3 font-sans">
+        <Loader2 className="w-6 h-6 animate-spin text-[#253A32]" />
+        <span className="text-xs font-medium text-[#5F635C]">Carregando dados patrimoniais...</span>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-[#090b0e] text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen bg-[#F6F3ED] text-[#242823] overflow-hidden font-sans">
       {/* 1. Desktop Persistent Sidebar */}
       <Sidebar
         currentTab={currentTab}
@@ -172,8 +176,8 @@ export default function Home() {
         />
 
         {/* Scrollable View Content */}
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-7xl mx-auto">
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#F6F3ED]">
+          <div className="w-full max-w-[1520px] mx-auto">
             {currentTab === 'dashboard' && metrics && (
               <DashboardView
                 metrics={metrics}

@@ -11,7 +11,7 @@ import {
   Plus, 
   RefreshCw,
   X,
-  Command
+  ArrowRight
 } from 'lucide-react';
 
 interface CommandPaletteProps {
@@ -64,8 +64,8 @@ export function CommandPalette({
     },
     {
       id: 'ai-diag',
-      title: 'Rodar Diagnóstico IA do Mês (< 200 tokens)',
-      category: 'Inteligência Artificial',
+      title: 'Executar Diagnóstico Analítico do Mês',
+      category: 'Inteligência Financeira',
       icon: Sparkles,
       run: () => {
         onClose();
@@ -84,7 +84,7 @@ export function CommandPalette({
     },
     {
       id: 'tab-dash',
-      title: 'Ir para Dashboard & Visão Geral',
+      title: 'Ir para Painel & Visão Geral',
       category: 'Navegação',
       icon: LayoutDashboard,
       run: () => {
@@ -114,7 +114,7 @@ export function CommandPalette({
     },
     {
       id: 'tab-openfinance',
-      title: 'Ir para Conexões Open Finance',
+      title: 'Ir para Conexões Institucionais',
       category: 'Navegação',
       icon: Landmark,
       run: () => {
@@ -124,7 +124,7 @@ export function CommandPalette({
     },
     {
       id: 'tab-copilot',
-      title: 'Ir para Copiloto & Níveis de Maturidade',
+      title: 'Ir para Parecer Patrimonial & Diretrizes',
       category: 'Navegação',
       icon: Sparkles,
       run: () => {
@@ -140,25 +140,28 @@ export function CommandPalette({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+    <div 
+      className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4 bg-[#242823]/40 backdrop-blur-sm animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div 
-        className="w-full max-w-xl rounded-2xl border border-[#1e2634] bg-[#0c0f14] shadow-2xl overflow-hidden"
+        className="w-full max-w-xl rounded-xl border border-[#E7E1D7] bg-[#FFFFFF] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search header */}
-        <div className="p-3 border-b border-[#1e2634] flex items-center gap-3">
-          <Search className="w-5 h-5 text-emerald-400 shrink-0" />
+        <div className="p-3.5 border-b border-[#E7E1D7] flex items-center gap-3 bg-[#FAF8F5]">
+          <Search className="w-4 h-4 text-[#253A32] shrink-0" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="O que você deseja fazer? (Ex: novo gasto, sincronizar, orçamentos)..."
-            className="w-full bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
+            placeholder="Buscar comando ou destino (ex: novo lançamento, conciliar, orçamentos)..."
+            className="w-full bg-transparent text-sm text-[#242823] placeholder-[#777A72] focus:outline-none"
             autoFocus
           />
           <button
             onClick={onClose}
-            className="p-1 rounded text-slate-500 hover:text-white transition-colors"
+            className="p-1 rounded-md text-[#777A72] hover:text-[#242823] hover:bg-[#E7E1D7]/50 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -167,8 +170,8 @@ export function CommandPalette({
         {/* Action list */}
         <div className="max-h-80 overflow-y-auto p-2 space-y-1">
           {filtered.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500">
-              Nenhum comando encontrado para "{query}".
+            <div className="py-8 text-center text-xs text-[#777A72]">
+              Nenhum comando localizado para &quot;{query}&quot;.
             </div>
           ) : (
             filtered.map((item) => {
@@ -177,21 +180,22 @@ export function CommandPalette({
                 <button
                   key={item.id}
                   onClick={item.run}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-[#161c26] text-left transition-colors group"
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-[#FAF8F5] text-left transition-colors group cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300 group-hover:text-emerald-400 group-hover:bg-emerald-500/10 transition-colors">
-                      <Icon className="w-4 h-4" />
+                    <div className="p-1.5 rounded-md bg-[#F0EDE6] text-[#253A32] group-hover:bg-[#253A32] group-hover:text-white transition-colors">
+                      <Icon className="w-3.5 h-3.5" />
                     </div>
                     <div>
-                      <div className="text-xs font-semibold text-white group-hover:text-emerald-400 transition-colors">
+                      <div className="text-xs font-medium text-[#242823] group-hover:text-[#253A32] transition-colors">
                         {item.title}
                       </div>
-                      <div className="text-[10px] text-slate-500 font-mono">{item.category}</div>
+                      <div className="text-[10px] text-[#777A72] font-mono">{item.category}</div>
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono text-slate-600 group-hover:text-slate-400">
-                    ↵ Executar
+                  <span className="text-[10px] font-mono text-[#777A72] group-hover:text-[#253A32] flex items-center gap-1">
+                    <span>Executar</span>
+                    <ArrowRight className="w-3 h-3" />
                   </span>
                 </button>
               );
@@ -200,10 +204,11 @@ export function CommandPalette({
         </div>
 
         {/* Footer shortcuts */}
-        <div className="px-4 py-2 bg-[#090b0e] border-t border-[#1e2634] flex items-center justify-between text-[10px] text-slate-500 font-mono">
-          <span>Dica: Use as setas ou clique para selecionar</span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1 py-0.5 rounded bg-slate-800 border border-slate-700">ESC</kbd> para fechar
+        <div className="px-4 py-2 bg-[#F0EDE6] border-t border-[#E7E1D7] flex items-center justify-between text-[10px] text-[#777A72] font-mono">
+          <span>Navegue pelas ações e pressione Enter</span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 rounded bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] font-mono">ESC</kbd>
+            <span>para dispensar</span>
           </span>
         </div>
       </div>
