@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 *.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
 finai.db
 
 # debug
@@ -34,6 +37,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
