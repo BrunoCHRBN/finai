@@ -25,12 +25,15 @@ export function BudgetsView({ metrics, categories, onUpdateCategoryBudget }: Bud
   };
 
   const handleSave = async (catId: string) => {
-    const num = parseFloat(editValue);
+    const num = parseFloat(editValue.replace(',', '.'));
     if (isNaN(num) || num < 0) return;
     setIsSaving(true);
     try {
       await onUpdateCategoryBudget(catId, num);
       setEditingId(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao salvar orçamento';
+      alert(msg);
     } finally {
       setIsSaving(false);
     }
@@ -212,8 +215,16 @@ export function BudgetsView({ metrics, categories, onUpdateCategoryBudget }: Bud
                           <span className="text-[#777A72]">R$</span>
                           <input
                             type="number"
+                            step="any"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleSave(cat.id);
+                              } else if (e.key === 'Escape') {
+                                setEditingId(null);
+                              }
+                            }}
                             className="w-24 px-1.5 py-0.5 rounded bg-[#FFFFFF] border border-[#253A32] text-[#242823] font-mono text-xs text-right focus:outline-none"
                             autoFocus
                           />
@@ -226,17 +237,26 @@ export function BudgetsView({ metrics, categories, onUpdateCategoryBudget }: Bud
                     {/* Action Button */}
                     <td className="py-3 px-4 text-right">
                       {isEditing ? (
-                        <button
-                          onClick={() => handleSave(cat.id)}
-                          disabled={isSaving}
-                          className="px-2.5 py-1 rounded bg-[#253A32] hover:bg-[#1B2B25] text-white font-medium text-xs transition-colors"
-                        >
-                          {isSaving ? 'Gravando...' : 'Salvar'}
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleSave(cat.id)}
+                            disabled={isSaving}
+                            className="px-2.5 py-1 rounded bg-[#253A32] hover:bg-[#1B2B25] text-white font-medium text-xs transition-colors cursor-pointer"
+                          >
+                            {isSaving ? 'Gravando...' : 'Salvar'}
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            disabled={isSaving}
+                            className="px-2 py-1 rounded border border-[#E7E1D7] text-[#5F635C] hover:text-[#242823] text-xs font-medium transition-colors cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
                       ) : (
                         <button
                           onClick={() => handleStartEdit(cat.id, limit)}
-                          className="px-2.5 py-1 rounded border border-[#E7E1D7] text-[#5F635C] hover:text-[#242823] hover:bg-[#F0EDE6] text-xs font-medium transition-colors"
+                          className="px-2.5 py-1 rounded border border-[#E7E1D7] text-[#5F635C] hover:text-[#242823] hover:bg-[#F0EDE6] text-xs font-medium transition-colors cursor-pointer"
                         >
                           Ajustar
                         </button>
