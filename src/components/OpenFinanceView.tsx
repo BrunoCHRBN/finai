@@ -16,7 +16,7 @@ import {
 interface OpenFinanceViewProps {
   accounts: any[];
   isSyncing: boolean;
-  onSync: () => void;
+  onSync: (itemId?: string) => void;
   onOpenPluggyConnect: () => void;
 }
 
@@ -41,6 +41,13 @@ export function OpenFinanceView({
     { name: 'C6 Bank', logo: '⚫', type: 'Conta & Cartão Carbon' },
   ];
 
+  const [customItemId, setCustomItemId] = useState('');
+
+  const handleSyncCustomItem = () => {
+    if (!customItemId.trim()) return;
+    onSync(customItemId.trim());
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner */}
@@ -60,7 +67,7 @@ export function OpenFinanceView({
 
         <div className="flex items-center gap-3">
           <button
-            onClick={onSync}
+            onClick={() => onSync()}
             disabled={isSyncing}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#1e2634] bg-[#12161f] text-xs font-semibold text-slate-200 hover:text-white hover:bg-slate-800 transition-all disabled:opacity-50"
           >
@@ -74,6 +81,36 @@ export function OpenFinanceView({
           >
             <Plus className="w-4 h-4 text-slate-950" />
             <span>Conectar Nova Instituição</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Meu Pluggy Quick Sync Card */}
+      <div className="p-5 rounded-2xl border border-blue-500/30 bg-[#0f141f] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="max-w-xl">
+          <div className="flex items-center gap-2 text-xs font-mono text-blue-400 font-semibold mb-1">
+            <ExternalLink className="w-4 h-4" />
+            <span>Importação Direta do Meu Pluggy (Pessoa Física Gratuita)</span>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Após autorizar sua conta da Caixa ou Nubank no <strong className="text-white">meu.pluggy.ai</strong>, copie o identificador da conexão (<code className="text-blue-300 font-mono">Item ID</code>) e cole aqui para puxar o extrato completo direto para o FinAI.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <input
+            type="text"
+            value={customItemId}
+            onChange={(e) => setCustomItemId(e.target.value)}
+            placeholder="Cole o Item ID da conexão..."
+            className="px-3.5 py-2 rounded-xl bg-[#141b29] border border-blue-500/40 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-blue-400 w-full md:w-72"
+          />
+          <button
+            onClick={handleSyncCustomItem}
+            disabled={isSyncing || !customItemId.trim()}
+            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-all disabled:opacity-50 shrink-0 font-mono"
+          >
+            {isSyncing ? 'Puxando...' : 'Puxar Dados'}
           </button>
         </div>
       </div>

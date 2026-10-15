@@ -205,7 +205,7 @@ export default function Home() {
               <OpenFinanceView
                 accounts={accounts}
                 isSyncing={isSyncingPluggy}
-                onSync={() => handleSyncPluggy()}
+                onSync={(itemId) => handleSyncPluggy(itemId)}
                 onOpenPluggyConnect={() => setIsPluggyModalOpen(true)}
               />
             )}
