@@ -154,6 +154,19 @@ export function PluggyConnectModal({ isOpen, onClose, onSuccessSync }: PluggyCon
             </div>
           ) : (
             <div className="space-y-3">
+              {/* Sandbox notice */}
+              <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs">
+                <div className="flex items-center justify-between text-amber-300 font-semibold mb-1">
+                  <span>Ambiente Sandbox (Modo de Testes)</span>
+                  <span className="font-mono text-[10px] bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">
+                    CREDENCIAIS DE TESTE
+                  </span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Para testar a importação agora, digite <strong className="text-white">Pluggy Bank</strong> na busca do quadro abaixo e informe o usuário <code className="text-amber-300 font-mono">user-ok</code> e senha <code className="text-amber-300 font-mono">password-ok</code>. Conexões com bancos reais exigem chave de produção no painel da Pluggy.
+                </p>
+              </div>
+
               {pluggyConnectUrl && (
                 <>
                   {/* Embedded Pluggy Connect Iframe */}
