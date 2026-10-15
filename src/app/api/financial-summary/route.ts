@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { db, ensureDbInitialized } from '@/db';
 import { accounts, categories, transactions, goals, aiDiagnostics } from '@/db/schema';
 import { calculateFinancialMetrics } from '@/lib/ai/math-engine';
+import { normalizeTransactionValues } from '@/lib/transactions';
 import { desc } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
@@ -22,8 +23,21 @@ export async function GET(request: NextRequest) {
       .orderBy(desc(aiDiagnostics.createdAt))
       .limit(1);
 
+    // Normalize all transactions using canonical convention
+    const normalizedTransactions = allTransactions.map((tx) => {
+      const { amount: normAmount, type: normType } = normalizeTransactionValues({
+        amount: tx.amount,
+        type: tx.type,
+      });
+      return {
+        ...tx,
+        amount: normAmount,
+        type: normType,
+      };
+    });
+
     // Filter transactions for the requested month
-    const monthTransactions = allTransactions.filter((t) => t.date.startsWith(month));
+    const monthTransactions = normalizedTransactions.filter((t) => t.date.startsWith(month));
 
     // Enrich transactions with category info
     const categoryMap = new Map(allCategories.map((c) => [c.id, c]));
@@ -59,7 +73,7 @@ export async function GET(request: NextRequest) {
       metrics,
       accounts: allAccounts,
       categories: allCategories,
-      transactions: allTransactions.map((t) => ({
+      transactions: normalizedTransactions.map((t) => ({
         ...t,
         category: t.categoryId ? categoryMap.get(t.categoryId) : null,
         account: accountMap.get(t.accountId),

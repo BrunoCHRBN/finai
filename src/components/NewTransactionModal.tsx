@@ -44,7 +44,7 @@ export function NewTransactionModal({
     try {
       const finalAmount = isExpense ? -Math.abs(num) : Math.abs(num);
       await onAddTransaction({
-        description,
+        description: description.trim(),
         amount: finalAmount,
         accountId,
         categoryId: categoryId || undefined,
@@ -54,6 +54,9 @@ export function NewTransactionModal({
       onClose();
       setDescription('');
       setAmount('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao cadastrar movimentação';
+      alert(msg);
     } finally {
       setIsLoading(false);
     }

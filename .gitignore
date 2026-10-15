@@ -23,7 +23,7 @@
 # misc
 .DS_Store
 *.pem
-*.db
+*.db*
 *.db-journal
 *.sqlite
 *.sqlite-journal

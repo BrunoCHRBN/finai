@@ -55,10 +55,12 @@ export function calculateFinancialMetrics(
   const categorySpentMap: Record<string, number> = {};
 
   for (const tx of transactions) {
-    if (tx.amount > 0) {
-      totalIncome += tx.amount;
+    const isIncome = (tx.type && tx.type.toUpperCase() === 'CREDIT') || (!tx.type && tx.amount > 0);
+    const absAmount = Math.abs(tx.amount || 0);
+
+    if (isIncome) {
+      totalIncome += absAmount;
     } else {
-      const absAmount = Math.abs(tx.amount);
       totalExpenses += absAmount;
 
       const group = (tx.categoryGroup || 'VARIABLE').toUpperCase();

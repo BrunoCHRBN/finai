@@ -9,6 +9,7 @@ import {
   Landmark,
   X
 } from 'lucide-react';
+import { isIncomeTransaction, isExpenseTransaction } from '@/lib/transactions';
 
 interface TransactionsViewProps {
   transactions: any[];
@@ -63,8 +64,8 @@ export function TransactionsView({
         return false;
       }
       // Type filter
-      if (selectedType === 'INCOME' && tx.amount < 0) return false;
-      if (selectedType === 'EXPENSE' && tx.amount >= 0) return false;
+      if (selectedType === 'INCOME' && !isIncomeTransaction(tx)) return false;
+      if (selectedType === 'EXPENSE' && !isExpenseTransaction(tx)) return false;
 
       return true;
     });
@@ -75,8 +76,12 @@ export function TransactionsView({
     let income = 0;
     let expense = 0;
     filteredTransactions.forEach((t) => {
-      if (t.amount > 0) income += t.amount;
-      else expense += Math.abs(t.amount);
+      const absAmount = Math.abs(t.amount || 0);
+      if (isIncomeTransaction(t)) {
+        income += absAmount;
+      } else {
+        expense += absAmount;
+      }
     });
     return {
       count: filteredTransactions.length,
@@ -235,7 +240,7 @@ export function TransactionsView({
                 </tr>
               ) : (
                 filteredTransactions.map((tx) => {
-                  const isIncome = tx.amount > 0;
+                  const isIncome = isIncomeTransaction(tx);
                   const isSelected = selectedTransaction?.id === tx.id;
                   return (
                     <tr
@@ -285,8 +290,8 @@ export function TransactionsView({
 
                       {/* Amount Tabular Aligned Right */}
                       <td className="py-2.5 px-4 text-right font-mono font-semibold tabular-nums whitespace-nowrap">
-                        <span className={isIncome ? 'text-[#245A3C]' : 'text-[#242823]'}>
-                          {isIncome ? `+${formatCurrency(tx.amount)}` : formatCurrency(tx.amount)}
+                        <span className={isIncome ? 'text-[#245A3C]' : 'text-[#963F36]'}>
+                          {isIncome ? `+${formatCurrency(Math.abs(tx.amount))}` : `-${formatCurrency(Math.abs(tx.amount))}`}
                         </span>
                       </td>
                     </tr>
@@ -322,8 +327,10 @@ export function TransactionsView({
           <div className="flex items-center gap-4">
             <div className="text-right">
               <div className="text-[10px] text-[#777A72] uppercase font-sans font-semibold">Valor Registrado</div>
-              <div className={`font-mono text-base font-bold tabular-nums ${selectedTransaction.amount > 0 ? 'text-[#245A3C]' : 'text-[#242823]'}`}>
-                {formatCurrency(selectedTransaction.amount)}
+              <div className={`font-mono text-base font-bold tabular-nums ${isIncomeTransaction(selectedTransaction) ? 'text-[#245A3C]' : 'text-[#963F36]'}`}>
+                {isIncomeTransaction(selectedTransaction)
+                  ? `+${formatCurrency(Math.abs(selectedTransaction.amount))}`
+                  : `-${formatCurrency(Math.abs(selectedTransaction.amount))}`}
               </div>
             </div>
 

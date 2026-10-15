@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db, ensureDbInitialized } from '@/db';
 import { accounts, transactions, categories } from '@/db/schema';
 import { getPluggyAccounts, getPluggyTransactions } from '@/lib/pluggy';
+import { normalizeTransactionValues } from '@/lib/transactions';
 import { eq } from 'drizzle-orm';
 
 /**
@@ -92,6 +93,11 @@ export async function POST(request: Request) {
         const txId = `pluggy-tx-${pTx.id}`;
         const existingTx = await db.select().from(transactions).where(eq(transactions.id, txId));
 
+        const { amount: normalizedAmount, type: normalizedType } = normalizeTransactionValues({
+          amount: pTx.amount,
+          type: pTx.type,
+        });
+
         if (existingTx.length === 0) {
           const matchedCategory = matchCategoryByRule(pTx.description || '', allCategories);
           
@@ -100,14 +106,21 @@ export async function POST(request: Request) {
             accountId: internalAccId,
             categoryId: matchedCategory,
             description: pTx.description || 'Transação Open Finance',
-            amount: pTx.amount || 0,
+            amount: normalizedAmount,
             date: pTx.date ? pTx.date.split('T')[0] : new Date().toISOString().split('T')[0],
-            type: pTx.type === 'CREDIT' ? 'CREDIT' : 'DEBIT',
+            type: normalizedType,
             status: pTx.status || 'SETTLED',
             pluggyTransactionId: pTx.id,
             createdAt: new Date().toISOString(),
           });
           transactionsSynced++;
+        } else {
+          // Idempotent update: ensure canonical amount and type without overwriting user category
+          await db.update(transactions).set({
+            amount: normalizedAmount,
+            type: normalizedType,
+            status: pTx.status || existingTx[0].status,
+          }).where(eq(transactions.id, txId));
         }
       }
     }
