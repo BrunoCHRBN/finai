@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/transactions-flow.test.ts"
+    "test": "node --test tests/*.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.29.1",
