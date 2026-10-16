@@ -11,7 +11,8 @@ import {
   Plus, 
   RefreshCw,
   X,
-  ArrowRight
+  ArrowRight,
+  Building2
 } from 'lucide-react';
 
 interface CommandPaletteProps {
@@ -90,6 +91,16 @@ export function CommandPalette({
       run: () => {
         onClose();
         onSelectTab('dashboard');
+      },
+    },
+    {
+      id: 'tab-patrimony',
+      title: 'Ir para Balanço Patrimonial & Ativos',
+      category: 'Navegação',
+      icon: Building2,
+      run: () => {
+        onClose();
+        onSelectTab('patrimony');
       },
     },
     {

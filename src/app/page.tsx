@@ -8,8 +8,10 @@ import { BudgetsView } from '@/components/BudgetsView';
 import { TransactionsView } from '@/components/TransactionsView';
 import { OpenFinanceView } from '@/components/OpenFinanceView';
 import { CopilotView } from '@/components/CopilotView';
+import { PatrimonyView } from '@/components/PatrimonyView';
 import { CommandPalette } from '@/components/CommandPalette';
 import { NewTransactionModal } from '@/components/NewTransactionModal';
+import { NewPatrimonialItemModal } from '@/components/NewPatrimonialItemModal';
 import { PluggyConnectModal } from '@/components/PluggyConnectModal';
 import { FinancialMetrics } from '@/lib/ai/math-engine';
 import { Loader2 } from 'lucide-react';
@@ -35,6 +37,8 @@ export default function Home() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isNewTxModalOpen, setIsNewTxModalOpen] = useState(false);
   const [isPluggyModalOpen, setIsPluggyModalOpen] = useState(false);
+  const [isPatrimonyModalOpen, setIsPatrimonyModalOpen] = useState(false);
+  const [patrimonyModalType, setPatrimonyModalType] = useState<'ASSET' | 'LIABILITY'>('ASSET');
 
   // Fetch initial summary
   const loadFinancialData = async () => {
@@ -123,6 +127,33 @@ export default function Home() {
     await loadFinancialData();
   };
 
+  // Toggle Ignore Transaction
+  const handleToggleIgnoreTransaction = async (txId: string, currentIgnored: boolean | number) => {
+    const targetIgnored = currentIgnored === 1 || currentIgnored === true ? 0 : 1;
+    const res = await fetch(`/api/transactions/${txId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isIgnored: targetIgnored }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao alterar estado da movimentação');
+    }
+    await loadFinancialData();
+  };
+
+  // Delete Manual Transaction
+  const handleDeleteTransaction = async (txId: string) => {
+    const res = await fetch(`/api/transactions/${txId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao excluir transação');
+    }
+    await loadFinancialData();
+  };
+
   // Update Category Budget Limit
   const handleUpdateCategoryBudget = async (categoryId: string, newLimit: number) => {
     const res = await fetch('/api/budgets', {
@@ -189,11 +220,27 @@ export default function Home() {
               />
             )}
 
+            {currentTab === 'patrimony' && (
+              <PatrimonyView
+                onOpenNewAssetModal={() => {
+                  setPatrimonyModalType('ASSET');
+                  setIsPatrimonyModalOpen(true);
+                }}
+                onOpenNewLiabilityModal={() => {
+                  setPatrimonyModalType('LIABILITY');
+                  setIsPatrimonyModalOpen(true);
+                }}
+              />
+            )}
+
             {currentTab === 'budgets' && metrics && (
               <BudgetsView
                 metrics={metrics}
                 categories={categories}
+                currentMonth={currentMonth}
+                onChangeMonth={setCurrentMonth}
                 onUpdateCategoryBudget={handleUpdateCategoryBudget}
+                onRefreshParent={loadFinancialData}
               />
             )}
 
@@ -203,6 +250,8 @@ export default function Home() {
                 accounts={accounts}
                 categories={categories}
                 onOpenNewTxModal={() => setIsNewTxModalOpen(true)}
+                onToggleIgnore={handleToggleIgnoreTransaction}
+                onDeleteTx={handleDeleteTransaction}
               />
             )}
 
@@ -252,6 +301,15 @@ export default function Home() {
         isOpen={isPluggyModalOpen}
         onClose={() => setIsPluggyModalOpen(false)}
         onSuccessSync={handleSyncPluggy}
+      />
+
+      <NewPatrimonialItemModal
+        isOpen={isPatrimonyModalOpen}
+        onClose={() => setIsPatrimonyModalOpen(false)}
+        onItemCreated={() => {
+          loadFinancialData();
+        }}
+        initialType={patrimonyModalType}
       />
     </div>
   );

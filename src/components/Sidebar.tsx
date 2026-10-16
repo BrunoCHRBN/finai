@@ -8,7 +8,8 @@ import {
   Landmark, 
   Sparkles, 
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Building2
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -24,8 +25,9 @@ export function Sidebar({ currentTab, onSelectTab }: SidebarProps) {
       group: 'FINANCEIRO',
       items: [
         { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
+        { id: 'patrimony', label: 'Patrimônio & Balanço', icon: Building2 },
         { id: 'transactions', label: 'Movimentações', icon: Receipt },
-        { id: 'budgets', label: 'Orçamentos & Custos', icon: PieChart },
+        { id: 'budgets', label: 'Planejamento & Metas', icon: PieChart },
       ],
     },
     {
