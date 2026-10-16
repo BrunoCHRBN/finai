@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, ArrowLeftRight } from 'lucide-react';
 
 interface NewTransactionModalProps {
   isOpen: boolean;
@@ -12,9 +12,10 @@ interface NewTransactionModalProps {
     description: string;
     amount: number;
     accountId: string;
+    destinationAccountId?: string;
     categoryId?: string;
     date: string;
-    type: 'DEBIT' | 'CREDIT';
+    type: 'DEBIT' | 'CREDIT' | 'TRANSFER';
   }) => Promise<void>;
 }
 
@@ -25,10 +26,13 @@ export function NewTransactionModal({
   categories,
   onAddTransaction,
 }: NewTransactionModalProps) {
+  const [selectedMode, setSelectedMode] = useState<'EXPENSE' | 'INCOME' | 'TRANSFER'>('EXPENSE');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
-  const [isExpense, setIsExpense] = useState(true);
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
+  const [destinationAccountId, setDestinationAccountId] = useState(
+    accounts.length > 1 ? accounts[1]?.id : ''
+  );
   const [categoryId, setCategoryId] = useState(categories[0]?.id || '');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,16 +44,25 @@ export function NewTransactionModal({
     const num = parseFloat(amount.replace(',', '.'));
     if (!description || isNaN(num) || num <= 0 || !accountId) return;
 
+    if (selectedMode === 'TRANSFER' && (!destinationAccountId || destinationAccountId === accountId)) {
+      alert('Selecione uma conta de destino diferente da conta de origem.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const finalAmount = isExpense ? -Math.abs(num) : Math.abs(num);
+      let finalAmount = num;
+      if (selectedMode === 'EXPENSE') finalAmount = -Math.abs(num);
+      else if (selectedMode === 'INCOME') finalAmount = Math.abs(num);
+
       await onAddTransaction({
         description: description.trim(),
         amount: finalAmount,
         accountId,
-        categoryId: categoryId || undefined,
+        destinationAccountId: selectedMode === 'TRANSFER' ? destinationAccountId : undefined,
+        categoryId: selectedMode !== 'TRANSFER' ? (categoryId || undefined) : undefined,
         date,
-        type: isExpense ? 'DEBIT' : 'CREDIT',
+        type: selectedMode === 'EXPENSE' ? 'DEBIT' : selectedMode === 'INCOME' ? 'CREDIT' : 'TRANSFER',
       });
       onClose();
       setDescription('');
@@ -61,6 +74,8 @@ export function NewTransactionModal({
       setIsLoading(false);
     }
   };
+
+  const availableDestinations = accounts.filter((a) => a.id !== accountId);
 
   return (
     <div 
@@ -75,14 +90,14 @@ export function NewTransactionModal({
         <div className="px-5 py-4 border-b border-[#E7E1D7] flex items-center justify-between bg-[#FAF8F5]">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-md bg-[#253A32] text-white flex items-center justify-center">
-              <Plus className="w-4 h-4" />
+              {selectedMode === 'TRANSFER' ? <ArrowLeftRight className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
             </div>
             <div>
               <h3 className="text-sm font-semibold text-[#242823]">
-                Lançamento Manual de Transação
+                {selectedMode === 'TRANSFER' ? 'Transferência entre Contas Próprias' : 'Lançamento Manual de Transação'}
               </h3>
               <p className="text-[10px] text-[#777A72] font-mono">
-                Extrato auxiliar com conciliação imediata
+                {selectedMode === 'TRANSFER' ? 'Movimentação neutra no fluxo operacional' : 'Extrato auxiliar com atualização atômica de saldo'}
               </p>
             </div>
           </div>
@@ -95,29 +110,40 @@ export function NewTransactionModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
-          {/* Type Toggle: Despesa vs Receita */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[#F0EDE6] border border-[#E7E1D7]">
+          {/* Mode Selector: Despesa vs Receita vs Transferência */}
+          <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-[#F0EDE6] border border-[#E7E1D7]">
             <button
               type="button"
-              onClick={() => setIsExpense(true)}
+              onClick={() => setSelectedMode('EXPENSE')}
               className={`py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                isExpense 
+                selectedMode === 'EXPENSE' 
                   ? 'bg-[#963F36] text-white shadow-sm' 
                   : 'text-[#5F635C] hover:text-[#242823]'
               }`}
             >
-              Despesa Operacional (Débito)
+              Despesa
             </button>
             <button
               type="button"
-              onClick={() => setIsExpense(false)}
+              onClick={() => setSelectedMode('INCOME')}
               className={`py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                !isExpense 
+                selectedMode === 'INCOME' 
                   ? 'bg-[#253A32] text-white shadow-sm' 
                   : 'text-[#5F635C] hover:text-[#242823]'
               }`}
             >
-              Receita / Entrada (Crédito)
+              Receita
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedMode('TRANSFER')}
+              className={`py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                selectedMode === 'TRANSFER' 
+                  ? 'bg-[#2563EB] text-white shadow-sm' 
+                  : 'text-[#5F635C] hover:text-[#242823]'
+              }`}
+            >
+              Transferência
             </button>
           </div>
 
@@ -153,47 +179,92 @@ export function NewTransactionModal({
               required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ex: Aluguel Comercial, Honorários, Supermercado..."
+              placeholder={selectedMode === 'TRANSFER' ? 'Ex: Aporte Reserva, Transferência C6 para Itaú...' : 'Ex: Aluguel Comercial, Honorários, Supermercado...'}
               className="w-full px-3.5 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] focus:outline-none focus:border-[#253A32] focus:ring-1 focus:ring-[#253A32]/20 text-xs"
             />
           </div>
 
-          {/* Account & Category */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
-                Conta de Destino
-              </label>
-              <select
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] focus:outline-none focus:border-[#253A32] font-mono text-xs cursor-pointer"
-              >
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Account Selection */}
+          {selectedMode === 'TRANSFER' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
+                  Conta de Origem (Débito)
+                </label>
+                <select
+                  value={accountId}
+                  onChange={(e) => {
+                    const newAcc = e.target.value;
+                    setAccountId(newAcc);
+                    if (destinationAccountId === newAcc) {
+                      const other = accounts.find((a) => a.id !== newAcc);
+                      if (other) setDestinationAccountId(other.id);
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] focus:outline-none focus:border-[#253A32] font-mono text-xs cursor-pointer"
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
-                Categoria Contábil
-              </label>
-              <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] focus:outline-none focus:border-[#253A32] text-xs cursor-pointer"
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
+                  Conta de Destino (Crédito)
+                </label>
+                <select
+                  value={destinationAccountId}
+                  onChange={(e) => setDestinationAccountId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] focus:outline-none focus:border-[#253A32] font-mono text-xs cursor-pointer"
+                >
+                  {availableDestinations.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
+                  Conta Associada
+                </label>
+                <select
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] focus:outline-none focus:border-[#253A32] font-mono text-xs cursor-pointer"
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[#777A72] font-mono mb-1 text-[11px] uppercase tracking-wider font-semibold">
+                  Categoria Contábil
+                </label>
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] focus:outline-none focus:border-[#253A32] text-xs cursor-pointer"
+                >
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Date */}
           <div>
@@ -216,7 +287,7 @@ export function NewTransactionModal({
               disabled={isLoading}
               className="w-full py-2.5 rounded-lg bg-[#253A32] hover:bg-[#1C2C26] text-white font-semibold text-xs transition-all shadow-sm disabled:opacity-50 cursor-pointer"
             >
-              {isLoading ? 'Registrando...' : 'Confirmar Lançamento'}
+              {isLoading ? 'Registrando...' : selectedMode === 'TRANSFER' ? 'Confirmar Transferência' : 'Confirmar Lançamento'}
             </button>
           </div>
         </form>

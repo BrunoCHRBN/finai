@@ -5,17 +5,23 @@ import {
   Search, 
   ArrowUpRight, 
   ArrowDownRight, 
+  ArrowLeftRight,
   Plus,
   Landmark,
-  X
+  X,
+  EyeOff,
+  Eye,
+  Trash2
 } from 'lucide-react';
-import { isIncomeTransaction, isExpenseTransaction } from '@/lib/transactions';
+import { isIncomeTransaction, isExpenseTransaction, isTransferTransaction, isIgnoredTransaction } from '@/lib/transactions';
 
 interface TransactionsViewProps {
   transactions: any[];
   accounts: any[];
   categories: any[];
   onOpenNewTxModal: () => void;
+  onToggleIgnore?: (txId: string, currentIgnored: boolean | number) => Promise<void>;
+  onDeleteTx?: (txId: string) => Promise<void>;
 }
 
 export function TransactionsView({
@@ -23,12 +29,15 @@ export function TransactionsView({
   accounts,
   categories,
   onOpenNewTxModal,
+  onToggleIgnore,
+  onDeleteTx,
 }: TransactionsViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAccount, setSelectedAccount] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -64,22 +73,33 @@ export function TransactionsView({
         return false;
       }
       // Type filter
-      if (selectedType === 'INCOME' && !isIncomeTransaction(tx)) return false;
-      if (selectedType === 'EXPENSE' && !isExpenseTransaction(tx)) return false;
+      if (selectedType === 'INCOME') {
+        if (!isIncomeTransaction(tx)) return false;
+      } else if (selectedType === 'EXPENSE') {
+        if (!isExpenseTransaction(tx)) return false;
+      } else if (selectedType === 'TRANSFER') {
+        if (!isTransferTransaction(tx)) return false;
+      } else if (selectedType === 'IGNORED') {
+        if (!isIgnoredTransaction(tx)) return false;
+      }
 
       return true;
     });
   }, [transactions, searchTerm, selectedAccount, selectedCategory, selectedType]);
 
-  // Aggregate stats for current filter
+  // Aggregate stats for current filter (excluding ignored and transfer from operating stats)
   const stats = useMemo(() => {
     let income = 0;
     let expense = 0;
+    let transfers = 0;
     filteredTransactions.forEach((t) => {
+      if (isIgnoredTransaction(t)) return;
       const absAmount = Math.abs(t.amount || 0);
-      if (isIncomeTransaction(t)) {
+      if (isTransferTransaction(t)) {
+        transfers += absAmount;
+      } else if (isIncomeTransaction(t)) {
         income += absAmount;
-      } else {
+      } else if (isExpenseTransaction(t)) {
         expense += absAmount;
       }
     });
@@ -87,9 +107,37 @@ export function TransactionsView({
       count: filteredTransactions.length,
       income,
       expense,
+      transfers,
       balance: income - expense,
     };
   }, [filteredTransactions]);
+
+  const handleToggleIgnoreAction = async (tx: any) => {
+    if (!onToggleIgnore) return;
+    setIsProcessing(true);
+    try {
+      await onToggleIgnore(tx.id, tx.isIgnored);
+      setSelectedTransaction((prev: any) => prev ? { ...prev, isIgnored: prev.isIgnored === 1 ? 0 : 1 } : null);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Erro ao alterar estado da movimentação');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteAction = async (tx: any) => {
+    if (!onDeleteTx) return;
+    if (!confirm('Deseja realmente excluir este lançamento manual? O saldo da conta será recalculado.')) return;
+    setIsProcessing(true);
+    try {
+      await onDeleteTx(tx.id);
+      setSelectedTransaction(null);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Erro ao excluir lançamento');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -103,14 +151,14 @@ export function TransactionsView({
             Movimentações Financeiras
           </h1>
           <p className="text-xs font-sans text-[#5F635C] mt-1">
-            Registro unificado de extratos bancários, cartões e lançamentos manuais com conciliação automática.
+            Registro unificado com reconciliação de transferências próprias, cartões e lançamentos manuais.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={onOpenNewTxModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#253A32] hover:bg-[#1B2B25] text-white text-xs font-sans font-medium transition-colors shadow-xs"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#253A32] hover:bg-[#1B2B25] text-white text-xs font-sans font-medium transition-colors shadow-xs cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5 text-white" />
             <span>Registrar Movimentação</span>
@@ -165,7 +213,7 @@ export function TransactionsView({
           <div className="flex rounded-md bg-[#F0EDE6] border border-[#E7E1D7] p-0.5 text-xs font-sans">
             <button
               onClick={() => setSelectedType('ALL')}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
                 selectedType === 'ALL'
                   ? 'bg-[#FFFFFF] text-[#242823] shadow-xs'
                   : 'text-[#5F635C] hover:text-[#242823]'
@@ -175,7 +223,7 @@ export function TransactionsView({
             </button>
             <button
               onClick={() => setSelectedType('INCOME')}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
                 selectedType === 'INCOME'
                   ? 'bg-[#FFFFFF] text-[#245A3C] shadow-xs'
                   : 'text-[#5F635C] hover:text-[#242823]'
@@ -185,13 +233,33 @@ export function TransactionsView({
             </button>
             <button
               onClick={() => setSelectedType('EXPENSE')}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
                 selectedType === 'EXPENSE'
                   ? 'bg-[#FFFFFF] text-[#963F36] shadow-xs'
                   : 'text-[#5F635C] hover:text-[#242823]'
               }`}
             >
               Saídas
+            </button>
+            <button
+              onClick={() => setSelectedType('TRANSFER')}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                selectedType === 'TRANSFER'
+                  ? 'bg-[#FFFFFF] text-[#2563EB] shadow-xs'
+                  : 'text-[#5F635C] hover:text-[#242823]'
+              }`}
+            >
+              Transferências
+            </button>
+            <button
+              onClick={() => setSelectedType('IGNORED')}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                selectedType === 'IGNORED'
+                  ? 'bg-[#FFFFFF] text-[#777A72] shadow-xs'
+                  : 'text-[#5F635C] hover:text-[#242823]'
+              }`}
+            >
+              Desconsideradas
             </button>
           </div>
         </div>
@@ -213,7 +281,7 @@ export function TransactionsView({
           </div>
 
           <div className="font-mono text-xs text-[#242823]">
-            Saldo Filtrado: <strong className={stats.balance >= 0 ? 'text-[#245A3C]' : 'text-[#963F36]'}>{formatCurrency(stats.balance)}</strong>
+            Resultado Operacional: <strong className={stats.balance >= 0 ? 'text-[#245A3C]' : 'text-[#963F36]'}>{formatCurrency(stats.balance)}</strong>
           </div>
         </div>
       </div>
@@ -227,7 +295,7 @@ export function TransactionsView({
                 <th className="py-2.5 px-4 w-28">Data</th>
                 <th className="py-2.5 px-4">Estabelecimento / Descrição</th>
                 <th className="py-2.5 px-4 w-44">Instituição</th>
-                <th className="py-2.5 px-4 w-48">Categoria</th>
+                <th className="py-2.5 px-4 w-48">Categoria / Tipo</th>
                 <th className="py-2.5 px-4 w-36 text-right">Valor (BRL)</th>
               </tr>
             </thead>
@@ -241,7 +309,10 @@ export function TransactionsView({
               ) : (
                 filteredTransactions.map((tx) => {
                   const isIncome = isIncomeTransaction(tx);
+                  const isTransfer = isTransferTransaction(tx);
+                  const isIgnored = isIgnoredTransaction(tx);
                   const isSelected = selectedTransaction?.id === tx.id;
+
                   return (
                     <tr
                       key={tx.id}
@@ -249,7 +320,9 @@ export function TransactionsView({
                       className={`cursor-pointer transition-colors ${
                         isSelected 
                           ? 'bg-[#F0EDE6]' 
-                          : 'hover:bg-[#F3F1EB]'
+                          : isIgnored
+                            ? 'bg-[#FAFAF8] opacity-60 hover:bg-[#F3F1EB]'
+                            : 'hover:bg-[#F3F1EB]'
                       }`}
                     >
                       {/* Date */}
@@ -260,12 +333,31 @@ export function TransactionsView({
                       {/* Description & Icon */}
                       <td className="py-2.5 px-4">
                         <div className="flex items-center gap-2.5 max-w-md">
-                          <div className={`p-1 rounded shrink-0 ${isIncome ? 'bg-[#E4EFE6] text-[#245A3C]' : 'bg-[#F0EDE6] text-[#5F635C]'}`}>
-                            {isIncome ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                          <div className={`p-1 rounded shrink-0 ${
+                            isIgnored 
+                              ? 'bg-[#E7E1D7] text-[#777A72]'
+                              : isTransfer 
+                                ? 'bg-[#EFF6FF] text-[#2563EB]' 
+                                : isIncome 
+                                  ? 'bg-[#E4EFE6] text-[#245A3C]' 
+                                  : 'bg-[#F0EDE6] text-[#5F635C]'
+                          }`}>
+                            {isTransfer ? (
+                              <ArrowLeftRight className="w-3.5 h-3.5" />
+                            ) : isIncome ? (
+                              <ArrowUpRight className="w-3.5 h-3.5" />
+                            ) : (
+                              <ArrowDownRight className="w-3.5 h-3.5" />
+                            )}
                           </div>
-                          <span className="font-medium text-[#242823] truncate" title={tx.description}>
+                          <span className={`font-medium truncate ${isIgnored ? 'line-through text-[#777A72]' : 'text-[#242823]'}`} title={tx.description}>
                             {tx.description}
                           </span>
+                          {isIgnored && (
+                            <span className="shrink-0 text-[10px] uppercase font-mono px-1.5 py-0.2 rounded bg-[#E7E1D7] text-[#5F635C]">
+                              Desconsiderada
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -277,21 +369,35 @@ export function TransactionsView({
                         </div>
                       </td>
 
-                      {/* Category */}
+                      {/* Category & Badges */}
                       <td className="py-2.5 px-4 whitespace-nowrap">
-                        {tx.category ? (
-                          <span className="px-2 py-0.5 rounded text-[11px] font-sans font-medium bg-[#F0EDE6] text-[#242823] border border-[#E7E1D7]">
-                            {tx.category.name}
-                          </span>
-                        ) : (
-                          <span className="text-[#777A72] text-[11px] italic">Sem classificação</span>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {isTransfer ? (
+                            <span className="px-2 py-0.5 rounded text-[11px] font-sans font-medium bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE]">
+                              Transferência Interna
+                            </span>
+                          ) : tx.category ? (
+                            <span className="px-2 py-0.5 rounded text-[11px] font-sans font-medium bg-[#F0EDE6] text-[#242823] border border-[#E7E1D7]">
+                              {tx.category.name}
+                            </span>
+                          ) : (
+                            <span className="text-[#777A72] text-[11px] italic">Sem classificação</span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Amount Tabular Aligned Right */}
                       <td className="py-2.5 px-4 text-right font-mono font-semibold tabular-nums whitespace-nowrap">
-                        <span className={isIncome ? 'text-[#245A3C]' : 'text-[#963F36]'}>
-                          {isIncome ? `+${formatCurrency(Math.abs(tx.amount))}` : `-${formatCurrency(Math.abs(tx.amount))}`}
+                        <span className={
+                          isIgnored 
+                            ? 'text-[#777A72] line-through'
+                            : isTransfer 
+                              ? (tx.amount >= 0 ? 'text-[#1D4ED8]' : 'text-[#5F635C]')
+                              : isIncome 
+                                ? 'text-[#245A3C]' 
+                                : 'text-[#963F36]'
+                        }>
+                          {tx.amount > 0 ? `+${formatCurrency(Math.abs(tx.amount))}` : `-${formatCurrency(Math.abs(tx.amount))}`}
                         </span>
                       </td>
                     </tr>
@@ -314,21 +420,74 @@ export function TransactionsView({
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#F0EDE6] text-[#5F635C] border border-[#E7E1D7]">
                 ID: {selectedTransaction.id.slice(0, 16)}...
               </span>
+              {selectedTransaction.type === 'TRANSFER' && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE]">
+                  Transferência Própria
+                </span>
+              )}
+              {isIgnoredTransaction(selectedTransaction) && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#FEE2E2] text-[#991B1B] border border-[#FECACA]">
+                  Desconsiderada das Métricas
+                </span>
+              )}
             </div>
             <div className="text-xs text-[#5F635C] font-sans flex items-center gap-4">
               <span>Data: {formatDate(selectedTransaction.date)}</span>
               <span>•</span>
               <span>Conta: {selectedTransaction.account?.name || 'Conta Padrão'}</span>
               <span>•</span>
-              <span>Categoria: {selectedTransaction.category?.name || 'Geral'}</span>
+              <span>Classificação: {selectedTransaction.type === 'TRANSFER' ? 'Transferência' : (selectedTransaction.category?.name || 'Geral')}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
+          <div className="flex items-center gap-3">
+            {/* Toggle Ignore Button */}
+            {onToggleIgnore && (
+              <button
+                onClick={() => handleToggleIgnoreAction(selectedTransaction)}
+                disabled={isProcessing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#E7E1D7] text-xs font-sans text-[#5F635C] hover:text-[#242823] hover:bg-[#F3F1EB] transition-colors cursor-pointer"
+                title={selectedTransaction.isIgnored === 1 ? 'Restaurar cálculo financeiro' : 'Ignorar do cálculo financeiro'}
+              >
+                {selectedTransaction.isIgnored === 1 ? (
+                  <>
+                    <Eye className="w-3.5 h-3.5 text-[#245A3C]" />
+                    <span>Restaurar Lançamento</span>
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="w-3.5 h-3.5 text-[#777A72]" />
+                    <span>Desconsiderar</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Delete Manual Transaction Button */}
+            {onDeleteTx && !selectedTransaction.pluggyTransactionId && (
+              <button
+                onClick={() => handleDeleteAction(selectedTransaction)}
+                disabled={isProcessing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#FECACA] bg-[#FEF2F2] text-[#991B1B] hover:bg-[#FEE2E2] text-xs font-sans transition-colors cursor-pointer"
+                title="Excluir lançamento manual e recalcular saldo da conta"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-[#991B1B]" />
+                <span>Excluir</span>
+              </button>
+            )}
+
+            <div className="text-right pl-3 border-l border-[#E7E1D7]">
               <div className="text-[10px] text-[#777A72] uppercase font-sans font-semibold">Valor Registrado</div>
-              <div className={`font-mono text-base font-bold tabular-nums ${isIncomeTransaction(selectedTransaction) ? 'text-[#245A3C]' : 'text-[#963F36]'}`}>
-                {isIncomeTransaction(selectedTransaction)
+              <div className={`font-mono text-base font-bold tabular-nums ${
+                isIgnoredTransaction(selectedTransaction)
+                  ? 'text-[#777A72] line-through'
+                  : selectedTransaction.type === 'TRANSFER'
+                    ? (selectedTransaction.amount >= 0 ? 'text-[#1D4ED8]' : 'text-[#5F635C]')
+                    : isIncomeTransaction(selectedTransaction)
+                      ? 'text-[#245A3C]'
+                      : 'text-[#963F36]'
+              }`}>
+                {selectedTransaction.amount > 0
                   ? `+${formatCurrency(Math.abs(selectedTransaction.amount))}`
                   : `-${formatCurrency(Math.abs(selectedTransaction.amount))}`}
               </div>
@@ -336,7 +495,7 @@ export function TransactionsView({
 
             <button
               onClick={() => setSelectedTransaction(null)}
-              className="p-1.5 rounded-md border border-[#E7E1D7] text-[#5F635C] hover:text-[#242823] hover:bg-[#F3F1EB]"
+              className="p-1.5 rounded-md border border-[#E7E1D7] text-[#5F635C] hover:text-[#242823] hover:bg-[#F3F1EB] cursor-pointer"
               title="Fechar detalhe"
             >
               <X className="w-4 h-4" />
