@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/*.test.ts"
+    "test": "node --test --import ./tests/alias-register.mjs tests/*.test.ts",
+    "test:market": "node --env-file=.env.local --test --test-concurrency=1 --import ./tests/alias-register.mjs tests/market-*.test.ts",
+    "test:mutacao": "python3 tests/mutacao/mutate_sprint6.py",
+    "benchmark": "node --import ./tests/alias-register.mjs scripts/benchmark-copilot.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.29.1",

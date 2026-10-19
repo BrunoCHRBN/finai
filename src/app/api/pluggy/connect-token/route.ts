@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createPluggyConnectToken } from '@/lib/pluggy';
+import { handleApiError } from '@/lib/api-error';
 
 export async function POST(request: Request) {
   try {
@@ -8,11 +9,7 @@ export async function POST(request: Request) {
 
     const data = await createPluggyConnectToken({ itemId, connectorId });
     return NextResponse.json({ accessToken: data.accessToken });
-  } catch (error: any) {
-    console.error('Error generating Pluggy connect token:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to generate connect token' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    return handleApiError(error, 'Falha ao gerar token de conexão Open Finance.', 'pluggy:connect-token');
   }
 }

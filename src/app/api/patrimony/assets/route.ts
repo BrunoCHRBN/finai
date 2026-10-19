@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, ensureDbInitialized } from '@/db';
 import { patrimonialAssets } from '@/db/schema';
+import { handleApiError } from '@/lib/api-error';
 
 export async function POST(request: Request) {
   try {
@@ -54,8 +55,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, asset: newAsset }, { status: 201 });
   } catch (error: unknown) {
-    console.error('Error creating patrimonial asset:', error);
-    const msg = error instanceof Error ? error.message : 'Falha ao cadastrar ativo';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return handleApiError(error, 'Falha ao cadastrar ativo.', 'patrimony:assets:POST');
   }
 }

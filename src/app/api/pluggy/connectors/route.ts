@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getPluggyConnectors } from '@/lib/pluggy';
+import { handleApiError } from '@/lib/api-error';
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,11 +8,7 @@ export async function GET(request: NextRequest) {
 
     const connectors = await getPluggyConnectors(country);
     return NextResponse.json({ connectors });
-  } catch (error: any) {
-    console.error('Error fetching Pluggy connectors:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to fetch connectors' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    return handleApiError(error, 'Falha ao buscar conectores Open Finance.', 'pluggy:connectors');
   }
 }

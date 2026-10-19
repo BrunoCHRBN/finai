@@ -564,7 +564,7 @@ describe('FinAI Transaction Normalization & Inflows/Outflows Flow', () => {
           },
         ], 'write');
         assert.fail('Should have thrown an error');
-      } catch (err: any) {
+      } catch (err) {
         assert.ok(err);
       }
 
@@ -614,8 +614,8 @@ describe('FinAI Transaction Normalization & Inflows/Outflows Flow', () => {
           INSERT INTO transactions (id, account_id, amount) VALUES ('tx-orphan', 'non-existent-acc', -50);
         `);
         assert.fail('Should have failed due to foreign key constraint violation');
-      } catch (err: any) {
-        assert.match(err.message, /FOREIGN KEY constraint failed/i);
+      } catch (err) {
+        assert.match((err as Error).message, /FOREIGN KEY constraint failed/i);
       }
     });
 

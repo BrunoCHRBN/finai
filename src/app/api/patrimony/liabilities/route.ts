@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, ensureDbInitialized } from '@/db';
 import { patrimonialLiabilities } from '@/db/schema';
+import { handleApiError } from '@/lib/api-error';
 
 export async function POST(request: Request) {
   try {
@@ -62,8 +63,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, liability: newLiability }, { status: 201 });
   } catch (error: unknown) {
-    console.error('Error creating patrimonial liability:', error);
-    const msg = error instanceof Error ? error.message : 'Falha ao cadastrar passivo';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return handleApiError(error, 'Falha ao cadastrar passivo.', 'patrimony:liabilities:POST');
   }
 }

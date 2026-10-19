@@ -14,7 +14,7 @@ export const VERIFIED_GEMINI_MODELS = {
   FAST_DEFAULT: 'gemini-3.5-flash-lite',
   FAST_FALLBACK: 'gemini-3.1-flash-lite',
   ADVANCED_DEFAULT: 'gemini-3.8-flash',
-  ADVANCED_FALLBACK: 'gemini-3.5-flash',
+  ADVANCED_FALLBACK: 'gemini-3.6-flash',
 } as const;
 
 const ALLOWED_MODEL_PATTERN = /^gemini-[0-9a-z.-]+$/i;

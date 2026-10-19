@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db, ensureDbInitialized } from '@/db';
 import { patrimonialLiabilities } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { handleApiError } from '@/lib/api-error';
 
 export async function PUT(
   request: Request,
@@ -81,9 +82,7 @@ export async function PUT(
     const updated = await db.select().from(patrimonialLiabilities).where(eq(patrimonialLiabilities.id, id)).limit(1);
     return NextResponse.json({ success: true, liability: updated[0] });
   } catch (error: unknown) {
-    console.error('Error updating patrimonial liability:', error);
-    const msg = error instanceof Error ? error.message : 'Falha ao atualizar passivo';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return handleApiError(error, 'Falha ao atualizar passivo.', 'patrimony:liabilities:[id]:PUT');
   }
 }
 
@@ -103,8 +102,6 @@ export async function DELETE(
     await db.delete(patrimonialLiabilities).where(eq(patrimonialLiabilities.id, id));
     return NextResponse.json({ success: true, message: 'Passivo removido com sucesso' });
   } catch (error: unknown) {
-    console.error('Error deleting patrimonial liability:', error);
-    const msg = error instanceof Error ? error.message : 'Falha ao remover passivo';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return handleApiError(error, 'Falha ao remover passivo.', 'patrimony:liabilities:[id]:DELETE');
   }
 }

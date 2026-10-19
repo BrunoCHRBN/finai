@@ -9,6 +9,7 @@ import { TransactionsView } from '@/components/TransactionsView';
 import { OpenFinanceView } from '@/components/OpenFinanceView';
 import { CopilotView } from '@/components/CopilotView';
 import { PatrimonyView } from '@/components/PatrimonyView';
+import { MarketIntelligenceView } from '@/components/market/MarketIntelligenceView';
 import { CommandPalette } from '@/components/CommandPalette';
 import { NewTransactionModal } from '@/components/NewTransactionModal';
 import { NewPatrimonialItemModal } from '@/components/NewPatrimonialItemModal';
@@ -271,6 +272,10 @@ export default function Home() {
                 onRunDiagnosis={handleRunAIDiagnosis}
                 isGenerating={isGeneratingAI}
               />
+            )}
+
+            {currentTab === 'market' && (
+              <MarketIntelligenceView />
             )}
           </div>
         </main>

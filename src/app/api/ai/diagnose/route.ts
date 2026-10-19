@@ -1,11 +1,12 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { loadOrBuildConsultativeSnapshot } from '@/lib/ai/context-builder';
+import { handleApiError } from '@/lib/api-error';
 import {
   executeCopilotAnalysis,
   getAIObservabilityMetrics,
   getGeminiRuntimeConfig,
-  CopilotRouteType,
 } from '@/lib/ai/gemini-client';
+import type { CopilotRouteType } from '@/lib/ai/gemini-client';
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,14 +53,7 @@ export async function GET(request: NextRequest) {
         configWarnings: config.configWarnings,
       },
     });
-  } catch (error) {
-    console.error('[AI Diagnose Error]:', error);
-    return NextResponse.json(
-      {
-        error: 'Falha ao processar diagnóstico financeiro.',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    return handleApiError(error, 'Falha ao processar diagnóstico financeiro.', 'ai:diagnose:GET');
   }
 }

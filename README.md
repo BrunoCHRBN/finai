@@ -44,7 +44,7 @@ O **FinAI** inverte essa lógica por meio de uma arquitetura de três camadas:
 - **Estilização & UI:** Tailwind CSS, Lucide Icons, Recharts, `font-variant-numeric: tabular-nums`.
 - **Banco de Dados & ORM:** LibSQL / SQLite com Drizzle ORM (`finai.db` local, com suporte a replicação em nuvem via Turso).
 - **Motor de Open Finance:** Pluggy API v2 (Conectores Bancários Brasileiros, Contas, Cartões, Extratos e Ponte OAuth MeuPluggy - Conector 200).
-- **Inteligência Artificial:** Google Gemini 2.5 Flash Lite (`@google/genai` SDK) com prompts orientados pela *Anti-AI-Slop Writing Directive v2*.
+- **Inteligência Artificial:** Google Gemini 3 Architecture (`@google/genai` SDK) com roteamento inteligente entre modelo rápido (`gemini-3.5-flash-lite`, fallback `gemini-3.1-flash-lite`) e modelo analítico avançado (`gemini-3.8-flash`, fallback `gemini-3.6-flash`), com prompts orientados pela *Anti-AI-Slop Writing Directive v2*.
 
 ---
 

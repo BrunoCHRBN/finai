@@ -3,6 +3,7 @@ import { db, ensureDbInitialized } from '@/db';
 import { accounts, patrimonialAssets, patrimonialLiabilities, patrimonialSnapshots } from '@/db/schema';
 import { calculatePatrimonialSummary } from '@/lib/patrimony-engine';
 import { eq } from 'drizzle-orm';
+import { handleApiError } from '@/lib/api-error';
 
 export async function POST(request: Request) {
   try {
@@ -49,8 +50,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, snapshot: snapshotData });
   } catch (error: unknown) {
-    console.error('Error generating patrimonial snapshot:', error);
-    const msg = error instanceof Error ? error.message : 'Falha ao registrar snapshot patrimonial';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return handleApiError(error, 'Falha ao registrar snapshot patrimonial.', 'patrimony:snapshots:POST');
   }
 }

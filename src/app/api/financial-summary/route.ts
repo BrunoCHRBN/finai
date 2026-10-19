@@ -8,6 +8,7 @@ import {
   isInvoicePaymentDescription 
 } from '@/lib/transactions';
 import { desc, eq } from 'drizzle-orm';
+import { handleApiError } from '@/lib/api-error';
 
 export async function GET(request: NextRequest) {
   try {
@@ -134,8 +135,6 @@ export async function GET(request: NextRequest) {
       latestDiagnosis: diagnosticsList[0] || null,
     });
   } catch (error: unknown) {
-    console.error('Failed to get financial summary:', error);
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Erro ao carregar o resumo financeiro consolidado.', 'financial-summary');
   }
 }

@@ -216,12 +216,12 @@ describe('FinAI Sprint 3 — Consolidação Patrimonial, Ativos, Passivos e Patr
     ];
 
     const dirtyAssets: RawPatrimonialAssetInput[] = [
-      { id: 'ast-1', name: 'Ativo com Vírgula', category: 'REAL_ESTATE', currentValue: '150000,50' as any },
+      { id: 'ast-1', name: 'Ativo com Vírgula', category: 'REAL_ESTATE', currentValue: '150000,50' },
       { id: 'ast-2', name: 'Ativo Nulo', category: 'VEHICLE', currentValue: null },
     ];
 
     const dirtyLiabilities: RawPatrimonialLiabilityInput[] = [
-      { id: 'l1', name: 'Dívida Inválida', category: 'OTHER', currentBalance: 'abc' as any },
+      { id: 'l1', name: 'Dívida Inválida', category: 'OTHER', currentBalance: 'abc' },
       { id: 'l2', name: 'Dívida Negativa Coerced', category: 'OTHER', currentBalance: -500 },
     ];
 

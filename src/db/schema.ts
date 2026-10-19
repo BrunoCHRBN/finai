@@ -175,22 +175,52 @@ export const recurringFlows = sqliteTable('recurring_flows', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   type: text('type').notNull(), // INCOME, EXPENSE
-  nature: text('nature').notNull().default('CONFIRMED'), // CONFIRMED (programado/contratado), ESTIMATED (hipótese)
+  nature: text('nature').notNull().default('CONFIRMED'), // CONFIRMED, ESTIMATED
   categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
   amount: real('amount').notNull(), // Positive magnitude
-  frequency: text('frequency').notNull().default('MONTHLY'), // MONTHLY, ONCE
+  amountType: text('amount_type').notNull().default('FIXED'), // FIXED, VARIABLE
+  frequency: text('frequency').notNull().default('MONTHLY'), // WEEKLY, BIWEEKLY, SEMIMONTHLY, MONTHLY, QUARTERLY, ANNUAL, ONCE
   dayOfMonth: integer('day_of_month').default(5),
+  secondDayOfMonth: integer('second_day_of_month'),
+  startDate: text('start_date'), // YYYY-MM-DD
+  nextDate: text('next_date'), // YYYY-MM-DD
+  endDate: text('end_date'), // YYYY-MM-DD
   startMonth: text('start_month').notNull(), // YYYY-MM
   endMonth: text('end_month'), // YYYY-MM
   totalInstallments: integer('total_installments'),
   remainingInstallments: integer('remaining_installments'),
   isActive: integer('is_active').notNull().default(1),
+  status: text('status').notNull().default('ACTIVE'), // ACTIVE, PAUSED, ENDED
+  destinationAccountId: text('destination_account_id').references(() => accounts.id, { onDelete: 'set null' }),
+  incomeCategory: text('income_category'), // SALARY, FREELANCE, COMMISSION, RENTAL, BENEFIT, OTHER
   notes: text('notes'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [
   index('recurring_flows_type_idx').on(table.type),
   index('recurring_flows_active_idx').on(table.isActive),
+  index('recurring_flows_status_idx').on(table.status),
+]);
+
+export const recurringOccurrences = sqliteTable('recurring_occurrences', {
+  id: text('id').primaryKey(),
+  flowId: text('flow_id').notNull().references(() => recurringFlows.id, { onDelete: 'cascade' }),
+  expectedDate: text('expected_date').notNull(), // YYYY-MM-DD
+  expectedAmount: real('expected_amount').notNull(),
+  status: text('status').notNull().default('PENDING'), // PENDING, OVERDUE, RECONCILED, MANUALLY_CONFIRMED, CANCELLED
+  transactionId: text('transaction_id').references(() => transactions.id, { onDelete: 'set null' }),
+  reconciledAmount: real('reconciled_amount'),
+  reconciledAt: text('reconciled_at'),
+  confidenceScore: real('confidence_score'),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('recurring_occurrences_flow_date_unique').on(table.flowId, table.expectedDate),
+  index('recurring_occurrences_flow_id_idx').on(table.flowId),
+  index('recurring_occurrences_expected_date_idx').on(table.expectedDate),
+  index('recurring_occurrences_status_idx').on(table.status),
+  index('recurring_occurrences_transaction_id_idx').on(table.transactionId),
 ]);
 
 export const planningAlerts = sqliteTable('planning_alerts', {
@@ -217,7 +247,73 @@ export const planningPreferences = sqliteTable('planning_preferences', {
   budgetCriticalPct: real('budget_critical_pct').notNull().default(100),
   maxDataStalenessDays: integer('max_data_staleness_days').notNull().default(7),
   liabilityDueSoonDays: integer('liability_due_soon_days').notNull().default(7),
+  syncIntervalMinutes: integer('sync_interval_minutes').notNull().default(0), // 0=Manual, 30, 60, 180, 360, 720, 1440
+  lastSyncAt: text('last_sync_at'),
+  nextScheduledSyncAt: text('next_scheduled_sync_at'),
   updatedAt: text('updated_at').notNull(),
 });
+
+export const processedWebhookEvents = sqliteTable('processed_webhook_events', {
+  id: text('id').primaryKey(),
+  eventType: text('event_type').notNull(),
+  itemId: text('item_id'),
+  payloadHash: text('payload_hash').notNull(),
+  status: text('status').notNull().default('PROCESSING'), // 'PROCESSING' | 'PROCESSED' | 'FAILED'
+  errorMessage: text('error_message'),
+  processedAt: text('processed_at').notNull(),
+}, (table) => [
+  index('processed_webhook_events_item_id_idx').on(table.itemId),
+  index('processed_webhook_events_status_idx').on(table.status),
+]);
+
+export const marketAssets = sqliteTable('market_assets', {
+  id: text('id').primaryKey(), // "B3:PETR4" or "CRYPTO:BTCUSDT"
+  symbol: text('symbol').notNull(),
+  name: text('name').notNull(),
+  assetType: text('asset_type').notNull(), // 'STOCK', 'FII', 'BDR', 'ETF', 'INDEX', 'CRYPTO'
+  market: text('market').notNull(), // 'B3', 'CRYPTO'
+  currency: text('currency').notNull().default('BRL'),
+  logoUrl: text('logo_url'),
+  sector: text('sector'),
+  subType: text('sub_type'),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('market_assets_symbol_market_unique').on(table.symbol, table.market),
+  index('market_assets_type_idx').on(table.assetType),
+  index('market_assets_market_idx').on(table.market),
+]);
+
+export const marketQuotesCache = sqliteTable('market_quotes_cache', {
+  id: text('id').primaryKey(), // matches assetId
+  assetId: text('asset_id').notNull().references(() => marketAssets.id, { onDelete: 'cascade' }),
+  price: real('price').notNull(),
+  change24hPct: real('change_24h_pct').notNull().default(0),
+  change24hAmount: real('change_24h_amount').notNull().default(0),
+  dayHigh: real('day_high'),
+  dayLow: real('day_low'),
+  volume24h: real('volume_24h'),
+  marketCap: real('market_cap'),
+  quoteTimestamp: text('quote_timestamp').notNull(),
+  fetchedAt: text('fetched_at').notNull(),
+  rawPayloadJson: text('raw_payload_json'),
+}, (table) => [
+  index('market_quotes_cache_asset_id_idx').on(table.assetId),
+  index('market_quotes_cache_fetched_at_idx').on(table.fetchedAt),
+]);
+
+export const marketWatchlist = sqliteTable('market_watchlist', {
+  id: text('id').primaryKey(),
+  assetId: text('asset_id').notNull().references(() => marketAssets.id, { onDelete: 'cascade' }),
+  targetPriceAlertHigh: real('target_price_alert_high'),
+  targetPriceAlertLow: real('target_price_alert_low'),
+  notes: text('notes'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  uniqueIndex('market_watchlist_asset_id_unique').on(table.assetId),
+  index('market_watchlist_sort_order_idx').on(table.sortOrder),
+]);
+
+
 
 

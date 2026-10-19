@@ -1,13 +1,13 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { loadOrBuildConsultativeSnapshot } from '@/lib/ai/context-builder';
+import { handleApiError } from '@/lib/api-error';
 import {
   executeCopilotAnalysis,
   getAIObservabilityMetrics,
   getGeminiRuntimeConfig,
   routeFinancialQuery,
-  ChatTurnMessage,
-  CopilotRouteType,
 } from '@/lib/ai/gemini-client';
+import type { ChatTurnMessage, CopilotRouteType } from '@/lib/ai/gemini-client';
 
 export async function GET() {
   const config = getGeminiRuntimeConfig();
@@ -84,10 +84,17 @@ export async function POST(request: NextRequest) {
 
       const stream = new ReadableStream({
         async start(controller) {
+          // Enqueue tolerante: apos o cliente abortar, o controller recusa escritas.
+          // Sem isto, o encerramento normal lancaria e viraria erro nao tratado.
           const sendEvent = (event: string, data: unknown) => {
-            controller.enqueue(
-              encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-            );
+            try {
+              controller.enqueue(
+                encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+              );
+              return true;
+            } catch {
+              return false;
+            }
           };
 
           try {
@@ -120,7 +127,19 @@ export async function POST(request: NextRequest) {
               sendEvent('delta', { text: chunk });
             }
 
-            // 4. Emit final validated contract & observability summary
+            // 4. Terminal event. Um stream interrompido pelo cliente NAO pode ser
+            //    reportado como `complete`/`success: true` — seria declarar entrega
+            //    integral de uma resposta parcial.
+            if (request.signal.aborted) {
+              sendEvent('aborted', {
+                success: false,
+                reason: 'CLIENT_ABORTED',
+                deliveredChars: answerText.length,
+              });
+              return;
+            }
+
+            // 5. Emit final validated contract & observability summary
             sendEvent('complete', {
               success: true,
               response,
@@ -128,14 +147,32 @@ export async function POST(request: NextRequest) {
               observability: getAIObservabilityMetrics(),
             });
           } catch (err) {
-            sendEvent('error', {
-              error:
-                err instanceof Error
-                  ? err.message
-                  : 'Erro ao processar resposta do Copiloto.',
-            });
+            // Cancelamento do cliente NAO e falha: nao pode ser reportado como `error`,
+            // que sugeriria defeito do servidor ou do provedor.
+            const errCode = (err as { code?: string } | null)?.code;
+            const errName = (err as { name?: string } | null)?.name;
+            const isClientAbort =
+              request.signal.aborted ||
+              errCode === 'ABORTED_BY_CLIENT' ||
+              errName === 'ClientAbortError';
+
+            if (isClientAbort) {
+              sendEvent('aborted', { success: false, reason: 'CLIENT_ABORTED' });
+            } else {
+              sendEvent('error', {
+                success: false,
+                error:
+                  err instanceof Error
+                    ? err.message
+                    : 'Erro ao processar resposta do Copiloto.',
+              });
+            }
           } finally {
-            controller.close();
+            try {
+              controller.close();
+            } catch {
+              // Stream ja encerrado pelo cliente.
+            }
           }
         },
       });
@@ -169,14 +206,7 @@ export async function POST(request: NextRequest) {
       },
       observability: getAIObservabilityMetrics(),
     });
-  } catch (error) {
-    console.error('[AI Chat Error]:', error);
-    return NextResponse.json(
-      {
-        error: 'Falha ao processar mensagem no Copiloto Financeiro.',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    return handleApiError(error, 'Falha ao processar mensagem no Copiloto Financeiro.', 'ai:chat:POST');
   }
 }

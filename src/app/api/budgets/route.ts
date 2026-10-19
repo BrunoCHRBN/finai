@@ -8,6 +8,7 @@ import {
   roundCurrency,
   type BudgetHistoryEntry,
 } from '@/lib/planning-engine';
+import { handleApiError } from '@/lib/api-error';
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,8 +30,7 @@ export async function GET(request: NextRequest) {
       execution,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Erro ao listar orçamentos';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Erro ao listar orçamentos.', 'budgets:GET');
   }
 }
 
@@ -144,7 +144,6 @@ export async function PUT(request: Request) {
       updatedAt: now,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Erro ao atualizar orçamento';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Erro ao atualizar orçamento.', 'budgets:PUT');
   }
 }

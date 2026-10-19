@@ -20,6 +20,17 @@ import {
   isInvoicePaymentDescription,
   isExpenseRefundOrEstorno,
 } from './transactions.ts';
+import {
+  addDays,
+  clampDay,
+  formatDateIso,
+  generateOccurrencesForFlow,
+  type RecurringFlowType,
+  type RecurringFlowNature,
+  type RecurringFlowAmountType,
+  type RecurringFrequency,
+  type RecurringFlowStatus,
+} from './recurring-engine.ts';
 
 export function roundCurrency(value: number): number {
   if (!Number.isFinite(value) || Number.isNaN(value)) return 0;
@@ -148,13 +159,34 @@ export interface RecurringFlowInput {
   nature?: 'CONFIRMED' | 'ESTIMATED' | string | null;
   categoryId?: string | null;
   amount: number | string;
-  frequency?: 'MONTHLY' | 'ONCE' | string | null;
+  amountType?: 'FIXED' | 'VARIABLE' | string | null;
+  frequency?: 'WEEKLY' | 'BIWEEKLY' | 'SEMIMONTHLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUAL' | 'ONCE' | string | null;
   dayOfMonth?: number | null;
+  secondDayOfMonth?: number | null;
+  startDate?: string | null;
+  nextDate?: string | null;
+  endDate?: string | null;
   startMonth: string; // YYYY-MM
   endMonth?: string | null; // YYYY-MM
   totalInstallments?: number | null;
   remainingInstallments?: number | null;
   isActive?: number | boolean | null;
+  status?: 'ACTIVE' | 'PAUSED' | 'ENDED' | string | null;
+  destinationAccountId?: string | null;
+  incomeCategory?: string | null;
+  notes?: string | null;
+}
+
+export interface RecurringOccurrenceInput {
+  id: string;
+  flowId: string;
+  expectedDate: string; // YYYY-MM-DD
+  expectedAmount: number | string;
+  status: 'PENDING' | 'OVERDUE' | 'RECONCILED' | 'MANUALLY_CONFIRMED' | 'CANCELLED' | string;
+  transactionId?: string | null;
+  reconciledAmount?: number | string | null;
+  reconciledAt?: string | null;
+  confidenceScore?: number | null;
   notes?: string | null;
 }
 
@@ -857,6 +889,29 @@ export interface ProjectionHypothesis {
   description: string;
 }
 
+export interface CashFlowHorizonSummary {
+  days: 30 | 60 | 90 | number;
+  targetDate: string;
+  projectedInflows: number;
+  projectedOutflows: number;
+  projectedNet: number;
+  projectedClosingBalance: number;
+  lowestProjectedBalance: number;
+  lowestProjectedDate?: string;
+  isNegativeLiquidity: boolean;
+}
+
+export interface CashFlowProjectionIndicators {
+  realizedIncomePeriod: number;
+  expectedIncomePeriod: number;
+  activeRecurringIncome: number;
+  overdueUnreconciledIncome: number;
+  expectedExpensesPeriod: number;
+  projectedClosingBalance: number;
+  futureCommitmentRatePct: number;
+  varianceExpectationVsRealized: number;
+}
+
 export interface CashFlowProjectionResult {
   referenceMonth: string;
   horizonMonths: number;
@@ -872,6 +927,12 @@ export interface CashFlowProjectionResult {
   months: ProjectionMonthBucket[];
   lowestProjectedBalance: number;
   lowestProjectedMonth: string;
+  indicators: CashFlowProjectionIndicators;
+  horizonSummaries: {
+    days30: CashFlowHorizonSummary;
+    days60: CashFlowHorizonSummary;
+    days90: CashFlowHorizonSummary;
+  };
 }
 
 export function calculateCashFlowProjection(params: {
@@ -883,6 +944,8 @@ export function calculateCashFlowProjection(params: {
   liabilities: PlanningLiabilityInput[];
   goals: PlanningGoalInput[];
   minLiquidityThreshold?: number;
+  occurrences?: RecurringOccurrenceInput[];
+  todayDate?: string;
 }): CashFlowProjectionResult {
   const {
     referenceMonth,
@@ -891,6 +954,8 @@ export function calculateCashFlowProjection(params: {
     recurringFlows,
     liabilities,
     goals,
+    occurrences = [],
+    todayDate,
   } = params;
 
   const horizonMonths = Math.min(36, Math.max(1, Math.round(params.horizonMonths || 6)));
@@ -1037,20 +1102,88 @@ export function calculateCashFlowProjection(params: {
         }
       }
 
+      // Check if explicit occurrences are provided for this flow in targetMonth
+      const occsForTargetMonth = occurrences.filter(
+        (o) =>
+          o.flowId === rf.id &&
+          o.expectedDate &&
+          o.expectedDate.startsWith(targetMonth) &&
+          o.status !== 'CANCELLED'
+      );
+
+      let effectiveAmount = 0;
+
+      if (occsForTargetMonth.length > 0) {
+        for (const occ of occsForTargetMonth) {
+          // If occurrence is already reconciled, check if the reconciled transaction is already in realized transactions
+          if (occ.status === 'RECONCILED' && occ.transactionId) {
+            const alreadyRealized = reconciledTransactions.some((t) => t.id === occ.transactionId);
+            if (alreadyRealized) {
+              // Already accounted for in realized inflows/outflows; do not duplicate
+              continue;
+            }
+          }
+          effectiveAmount = roundCurrency(effectiveAmount + Math.abs(safeNumeric(occ.expectedAmount, 0)));
+        }
+      } else {
+        // Evaluate exact concrete occurrences in targetMonth (no proportional monthly multipliers)
+        const [tYStr, tMStr] = targetMonth.split('-');
+        const tY = parseInt(tYStr, 10);
+        const tM = parseInt(tMStr, 10);
+        const mEndDay = clampDay(tY, tM, 31);
+        const mStartDate = `${targetMonth}-01`;
+        const mEndDate = formatDateIso(tY, tM, mEndDay);
+
+        const genOccs = generateOccurrencesForFlow(
+          {
+            id: rf.id,
+            title: rf.title || 'Fluxo Recorrente',
+            type: (rf.type || 'EXPENSE').toUpperCase() as RecurringFlowType,
+            nature: (rf.nature || 'CONFIRMED').toUpperCase() as RecurringFlowNature,
+            categoryId: rf.categoryId,
+            amount,
+            amountType: (rf.amountType || 'FIXED').toUpperCase() as RecurringFlowAmountType,
+            frequency: freq as RecurringFrequency,
+            dayOfMonth: rf.dayOfMonth,
+            secondDayOfMonth: rf.secondDayOfMonth,
+            startDate: rf.startDate,
+            nextDate: rf.nextDate,
+            endDate: rf.endDate,
+            startMonth: rf.startMonth || referenceMonth,
+            endMonth: rf.endMonth,
+            totalInstallments: rf.totalInstallments,
+            remainingInstallments: rf.remainingInstallments,
+            isActive: rf.isActive ?? 1,
+            status: (rf.status || 'ACTIVE').toUpperCase() as RecurringFlowStatus,
+            destinationAccountId: rf.destinationAccountId,
+            incomeCategory: rf.incomeCategory,
+            notes: rf.notes,
+          },
+          mStartDate,
+          mEndDate
+        );
+
+        for (const gen of genOccs) {
+          effectiveAmount = roundCurrency(effectiveAmount + Math.abs(safeNumeric(gen.expectedAmount, 0)));
+        }
+      }
+
+      if (effectiveAmount <= 0) continue;
+
       const isIncome = (rf.type || '').toUpperCase() === 'INCOME';
       const isEstimated = (rf.nature || 'CONFIRMED').toUpperCase() === 'ESTIMATED';
 
       if (isEstimated) {
         if (isIncome) {
-          estimatedInflows = roundCurrency(estimatedInflows + amount);
+          estimatedInflows = roundCurrency(estimatedInflows + effectiveAmount);
         } else {
-          estimatedOutflows = roundCurrency(estimatedOutflows + amount);
+          estimatedOutflows = roundCurrency(estimatedOutflows + effectiveAmount);
         }
       } else {
         if (isIncome) {
-          confirmedRecurringInflows = roundCurrency(confirmedRecurringInflows + amount);
+          confirmedRecurringInflows = roundCurrency(confirmedRecurringInflows + effectiveAmount);
         } else {
-          confirmedRecurringOutflows = roundCurrency(confirmedRecurringOutflows + amount);
+          confirmedRecurringOutflows = roundCurrency(confirmedRecurringOutflows + effectiveAmount);
         }
       }
     }
@@ -1196,6 +1329,332 @@ export function calculateCashFlowProjection(params: {
     }
   }
 
+  // 7. Calculate Sprint 7 Indicators & 30/60/90 Days Horizon Summaries
+  const flowTypeMap = new Map<string, string>(
+    recurringFlows.map((rf) => [rf.id, (rf.type || 'EXPENSE').toUpperCase()])
+  );
+
+  const activeRecurringIncome = roundCurrency(
+    activeRecurring
+      .filter((rf) => (rf.type || '').toUpperCase() === 'INCOME')
+      .reduce((sum, rf) => sum + roundCurrency(Math.abs(safeNumeric(rf.amount, 0))), 0)
+  );
+
+  const realizedIncomePeriod = months[0]?.realized.inflows ?? 0;
+
+  // Expected income & expenses for the reference period:
+  // Evaluated per active flow to ensure flows with and without pre-existing occurrences in referenceMonth are both accounted for.
+  const [refYearStr, refMonthStr] = referenceMonth.split('-');
+  const refY = parseInt(refYearStr, 10) || 2026;
+  const refM = parseInt(refMonthStr, 10) || 10;
+  const refMonthStart = `${referenceMonth}-01`;
+  const refMonthEnd = formatDateIso(refY, refM, clampDay(refY, refM, 31));
+
+  let expectedIncomePeriod = 0;
+  let expectedExpensesPeriod = 0;
+
+  for (const rf of activeRecurring) {
+    const fType = (rf.type || 'EXPENSE').toUpperCase();
+    const amount = roundCurrency(Math.abs(safeNumeric(rf.amount, 0)));
+    if (amount <= 0) continue;
+
+    // Check if flow is valid in referenceMonth
+    const startM = rf.startMonth || referenceMonth;
+    const endM = rf.endMonth || null;
+    if (referenceMonth < startM || (endM && referenceMonth > endM)) continue;
+    if ((rf.frequency || 'MONTHLY').toUpperCase() === 'ONCE' && referenceMonth !== startM) continue;
+
+    const occsForRefMonth = occurrences.filter(
+      (o) =>
+        o.flowId === rf.id &&
+        o.expectedDate &&
+        o.expectedDate.startsWith(referenceMonth) &&
+        o.status !== 'CANCELLED'
+    );
+
+    let flowMonthTotal = 0;
+    if (occsForRefMonth.length > 0) {
+      for (const occ of occsForRefMonth) {
+        flowMonthTotal = roundCurrency(flowMonthTotal + Math.abs(safeNumeric(occ.expectedAmount, 0)));
+      }
+    } else {
+      const flowModel = {
+        id: rf.id,
+        title: rf.title || 'Fluxo Recorrente',
+        type: fType as RecurringFlowType,
+        nature: (rf.nature || 'CONFIRMED').toUpperCase() as RecurringFlowNature,
+        categoryId: rf.categoryId,
+        amount,
+        amountType: (rf.amountType || 'FIXED').toUpperCase() as RecurringFlowAmountType,
+        frequency: (rf.frequency || 'MONTHLY').toUpperCase() as RecurringFrequency,
+        dayOfMonth: rf.dayOfMonth,
+        secondDayOfMonth: rf.secondDayOfMonth,
+        startDate: rf.startDate,
+        nextDate: rf.nextDate,
+        endDate: rf.endDate,
+        startMonth: rf.startMonth || referenceMonth,
+        endMonth: rf.endMonth,
+        totalInstallments: rf.totalInstallments,
+        remainingInstallments: rf.remainingInstallments,
+        isActive: rf.isActive ?? 1,
+        status: (rf.status || 'ACTIVE').toUpperCase() as RecurringFlowStatus,
+        destinationAccountId: rf.destinationAccountId,
+        incomeCategory: rf.incomeCategory,
+        notes: rf.notes,
+      };
+      const genOccs = generateOccurrencesForFlow(flowModel, refMonthStart, refMonthEnd);
+      for (const gen of genOccs) {
+        flowMonthTotal = roundCurrency(flowMonthTotal + Math.abs(safeNumeric(gen.expectedAmount, 0)));
+      }
+    }
+
+    if (fType === 'INCOME') {
+      expectedIncomePeriod = roundCurrency(expectedIncomePeriod + flowMonthTotal);
+    } else {
+      expectedExpensesPeriod = roundCurrency(expectedExpensesPeriod + flowMonthTotal);
+    }
+  }
+
+  // Include month liabilities and goal contributions in expected expenses
+  const monthLiabilities = activeLiabilityTrackers.reduce(
+    (sum, l) => sum + roundCurrency(Math.min(l.remainingBalance, l.monthlyPayment)),
+    0
+  );
+  const monthGoalContribs = activeGoalTrackers.reduce(
+    (sum, g) => sum + roundCurrency(Math.min(g.remainingToTarget, g.monthlyContribution)),
+    0
+  );
+  expectedExpensesPeriod = roundCurrency(expectedExpensesPeriod + monthLiabilities + monthGoalContribs);
+
+  // Overdue unreconciled income
+  const refDateStr = todayDate || `${referenceMonth}-01`;
+  let overdueUnreconciledIncome = 0;
+  for (const occ of occurrences) {
+    const fType = flowTypeMap.get(occ.flowId) || 'EXPENSE';
+    if (fType === 'INCOME') {
+      const isPast = occ.expectedDate < refDateStr;
+      const isUnreconciled =
+        occ.status === 'OVERDUE' || (isPast && occ.status === 'PENDING');
+      if (
+        isUnreconciled &&
+        occ.status !== 'CANCELLED' &&
+        occ.status !== 'RECONCILED' &&
+        occ.status !== 'MANUALLY_CONFIRMED'
+      ) {
+        overdueUnreconciledIncome = roundCurrency(
+          overdueUnreconciledIncome + Math.abs(safeNumeric(occ.expectedAmount, 0))
+        );
+      }
+    }
+  }
+
+  // Future commitment rate: Safe handling of zero income, missing data and invalid values
+  let futureCommitmentRatePct = 0;
+  if (expectedIncomePeriod > 0) {
+    const rawRate = (expectedExpensesPeriod / expectedIncomePeriod) * 100;
+    futureCommitmentRatePct = Number.isFinite(rawRate)
+      ? roundCurrency(Math.min(1000, Math.max(0, rawRate)))
+      : 0;
+  } else {
+    // When expected income is zero or non-positive: commitment of non-existent income is 0
+    // (Never return NaN, Infinity, or a false visual number like 100%)
+    futureCommitmentRatePct = 0;
+  }
+
+  const varianceExpectationVsRealized = roundCurrency(realizedIncomePeriod - expectedIncomePeriod);
+
+  const indicators: CashFlowProjectionIndicators = {
+    realizedIncomePeriod,
+    expectedIncomePeriod,
+    activeRecurringIncome,
+    overdueUnreconciledIncome,
+    expectedExpensesPeriod,
+    projectedClosingBalance: months[0] ? months[0].closingTotalProjectedBalance : initialLiquidBalance,
+    futureCommitmentRatePct,
+    varianceExpectationVsRealized,
+  };
+
+  // Horizon Summaries: 30, 60, 90 days with deterministic, individually dated events
+  const targetDate30 = addDays(refDateStr, 30);
+  const targetDate60 = addDays(refDateStr, 60);
+  const targetDate90 = addDays(refDateStr, 90);
+
+  // Index explicit occurrences by flowId:expectedDate and track the latest explicit occurrence date per flow
+  const occurrencesByKey = new Map<string, RecurringOccurrenceInput>();
+  const latestOccDateByFlow = new Map<string, string>();
+  for (const occ of occurrences) {
+    if (occ.expectedDate) {
+      occurrencesByKey.set(`${occ.flowId}:${occ.expectedDate}`, occ);
+      const currLatest = latestOccDateByFlow.get(occ.flowId);
+      if (!currLatest || occ.expectedDate > currLatest) {
+        latestOccDateByFlow.set(occ.flowId, occ.expectedDate);
+      }
+    }
+  }
+
+  // Generate concrete dated occurrences up to targetDate90 for flows without explicit occurrences
+  for (const rf of activeRecurring) {
+    if (latestOccDateByFlow.has(rf.id)) {
+      continue;
+    }
+
+    const genStartDate = refDateStr;
+    if (genStartDate > targetDate90) {
+      continue;
+    }
+
+    const flowModel = {
+      id: rf.id,
+      title: rf.title || 'Fluxo Recorrente',
+      type: (rf.type || 'EXPENSE').toUpperCase() as RecurringFlowType,
+      nature: (rf.nature || 'CONFIRMED').toUpperCase() as RecurringFlowNature,
+      categoryId: rf.categoryId,
+      amount: Math.abs(safeNumeric(rf.amount, 0)),
+      amountType: (rf.amountType || 'FIXED').toUpperCase() as RecurringFlowAmountType,
+      frequency: (rf.frequency || 'MONTHLY').toUpperCase() as RecurringFrequency,
+      dayOfMonth: rf.dayOfMonth,
+      secondDayOfMonth: rf.secondDayOfMonth,
+      startDate: rf.startDate,
+      nextDate: rf.nextDate,
+      endDate: rf.endDate,
+      startMonth: rf.startMonth || referenceMonth,
+      endMonth: rf.endMonth,
+      totalInstallments: rf.totalInstallments,
+      remainingInstallments: rf.remainingInstallments,
+      isActive: rf.isActive ?? 1,
+      status: (rf.status || 'ACTIVE').toUpperCase() as RecurringFlowStatus,
+      destinationAccountId: rf.destinationAccountId,
+      incomeCategory: rf.incomeCategory,
+      notes: rf.notes,
+    };
+
+    const genOccs = generateOccurrencesForFlow(flowModel, genStartDate, targetDate90);
+    for (const gen of genOccs) {
+      const key = `${gen.flowId}:${gen.expectedDate}`;
+      if (!occurrencesByKey.has(key)) {
+        occurrencesByKey.set(key, gen);
+      }
+    }
+  }
+
+  // Filter eligible occurrences affecting future cash:
+  // - in window [refDateStr, targetDate90]
+  // - status !== 'CANCELLED'
+  // - status !== 'RECONCILED' && !transactionId
+  // - expectedDate >= refDateStr (overdue past occurrences do NOT turn into available balance)
+  const allEligibleOccurrences = Array.from(occurrencesByKey.values()).filter((occ) => {
+    if (!occ.expectedDate || occ.expectedDate < refDateStr || occ.expectedDate > targetDate90) {
+      return false;
+    }
+    if (occ.status === 'CANCELLED') return false;
+    if (occ.status === 'RECONCILED' || Boolean(occ.transactionId)) return false;
+    return true;
+  });
+
+  function calculateHorizonSummary(days: number, targetDate: string): CashFlowHorizonSummary {
+    const dayChanges = new Map<string, { inflow: number; outflow: number }>();
+
+    let projectedInflows = 0;
+    let projectedOutflows = 0;
+
+    for (const occ of allEligibleOccurrences) {
+      if (occ.expectedDate > targetDate) continue;
+      const fType = flowTypeMap.get(occ.flowId) || 'EXPENSE';
+      const amount = roundCurrency(Math.abs(safeNumeric(occ.expectedAmount, 0)));
+      if (amount <= 0) continue;
+
+      const day = dayChanges.get(occ.expectedDate) || { inflow: 0, outflow: 0 };
+      if (fType === 'INCOME') {
+        day.inflow = roundCurrency(day.inflow + amount);
+        projectedInflows = roundCurrency(projectedInflows + amount);
+      } else {
+        day.outflow = roundCurrency(day.outflow + amount);
+        projectedOutflows = roundCurrency(projectedOutflows + amount);
+      }
+      dayChanges.set(occ.expectedDate, day);
+    }
+
+    // Include structured liabilities in horizon
+    const monthsInHorizon = Math.ceil(days / 30);
+    for (let mIdx = 1; mIdx <= monthsInHorizon; mIdx++) {
+      const mStr = addMonths(referenceMonth, mIdx);
+      const liabDate = `${mStr}-10`;
+      if (liabDate >= refDateStr && liabDate <= targetDate) {
+        for (const liab of activeLiabilityTrackers) {
+          if (liab.remainingBalance <= 0) continue;
+          if (liab.installmentsRemaining !== null && liab.installmentsRemaining <= 0) continue;
+          const pmt = roundCurrency(Math.min(liab.remainingBalance, liab.monthlyPayment));
+          if (pmt > 0) {
+            projectedOutflows = roundCurrency(projectedOutflows + pmt);
+            const day = dayChanges.get(liabDate) || { inflow: 0, outflow: 0 };
+            day.outflow = roundCurrency(day.outflow + pmt);
+            dayChanges.set(liabDate, day);
+          }
+        }
+      }
+
+      if (mIdx === 1 && priorUnsettledCardDebt > 0) {
+        const cardDate = `${mStr}-10`;
+        if (cardDate >= refDateStr && cardDate <= targetDate) {
+          projectedOutflows = roundCurrency(projectedOutflows + priorUnsettledCardDebt);
+          const day = dayChanges.get(cardDate) || { inflow: 0, outflow: 0 };
+          day.outflow = roundCurrency(day.outflow + priorUnsettledCardDebt);
+          dayChanges.set(cardDate, day);
+        }
+      }
+
+      const goalDate = `${mStr}-01`;
+      if (goalDate >= refDateStr && goalDate <= targetDate) {
+        for (const gt of activeGoalTrackers) {
+          if (gt.remainingToTarget <= 0) continue;
+          const contrib = roundCurrency(Math.min(gt.remainingToTarget, gt.monthlyContribution));
+          if (contrib > 0) {
+            projectedOutflows = roundCurrency(projectedOutflows + contrib);
+            const day = dayChanges.get(goalDate) || { inflow: 0, outflow: 0 };
+            day.outflow = roundCurrency(day.outflow + contrib);
+            dayChanges.set(goalDate, day);
+          }
+        }
+      }
+    }
+
+    const projectedNet = roundCurrency(projectedInflows - projectedOutflows);
+    const projectedClosingBalance = roundCurrency(initialLiquidBalance + projectedNet);
+
+    // Timeline analysis: Calculate running balance day-by-day to find minimum balance and its exact date
+    const sortedDates = Array.from(dayChanges.keys()).sort();
+    let runningBalance = initialLiquidBalance;
+    let lowestBalance = initialLiquidBalance;
+    let lowestDate = refDateStr;
+
+    for (const dStr of sortedDates) {
+      const day = dayChanges.get(dStr)!;
+      runningBalance = roundCurrency(runningBalance + day.inflow - day.outflow);
+      if (runningBalance < lowestBalance) {
+        lowestBalance = runningBalance;
+        lowestDate = dStr;
+      }
+    }
+
+    return {
+      days,
+      targetDate,
+      projectedInflows,
+      projectedOutflows,
+      projectedNet,
+      projectedClosingBalance,
+      lowestProjectedBalance: lowestBalance,
+      lowestProjectedDate: lowestDate,
+      isNegativeLiquidity: lowestBalance < 0 || projectedClosingBalance < 0,
+    };
+  }
+
+  const horizonSummaries = {
+    days30: calculateHorizonSummary(30, targetDate30),
+    days60: calculateHorizonSummary(60, targetDate60),
+    days90: calculateHorizonSummary(90, targetDate90),
+  };
+
   return {
     referenceMonth,
     horizonMonths,
@@ -1211,6 +1670,8 @@ export function calculateCashFlowProjection(params: {
     months,
     lowestProjectedBalance,
     lowestProjectedMonth,
+    indicators,
+    horizonSummaries,
   };
 }
 
@@ -1911,6 +2372,13 @@ export interface ConsultativePlanningSnapshot {
     lowestProjectedBalance: number;
     lowestProjectedMonth: string;
     horizonMonths: number;
+    projected30DaysBalance?: number;
+    projected60DaysBalance?: number;
+    projected90DaysBalance?: number;
+    expectedIncomePeriod?: number;
+    realizedIncomePeriod?: number;
+    varianceExpectationVsRealized?: number;
+    overdueUnreconciledIncome?: number;
   };
   activeAlertsCount: number;
 }
@@ -1955,6 +2423,13 @@ export function buildConsultativePlanningSnapshot(params: {
       lowestProjectedBalance: cashFlowProjection.lowestProjectedBalance,
       lowestProjectedMonth: cashFlowProjection.lowestProjectedMonth,
       horizonMonths: cashFlowProjection.horizonMonths,
+      projected30DaysBalance: cashFlowProjection.horizonSummaries?.days30?.projectedClosingBalance,
+      projected60DaysBalance: cashFlowProjection.horizonSummaries?.days60?.projectedClosingBalance,
+      projected90DaysBalance: cashFlowProjection.horizonSummaries?.days90?.projectedClosingBalance,
+      expectedIncomePeriod: cashFlowProjection.indicators?.expectedIncomePeriod,
+      realizedIncomePeriod: cashFlowProjection.indicators?.realizedIncomePeriod,
+      varianceExpectationVsRealized: cashFlowProjection.indicators?.varianceExpectationVsRealized,
+      overdueUnreconciledIncome: cashFlowProjection.indicators?.overdueUnreconciledIncome,
     },
     activeAlertsCount: alerts.length,
   };

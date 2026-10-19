@@ -3,6 +3,7 @@ import { db, ensureDbInitialized } from '@/db';
 import { goals } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { roundCurrency, safeNumeric } from '@/lib/planning-engine';
+import { handleApiError } from '@/lib/api-error';
 
 export async function PATCH(
   request: Request,
@@ -115,8 +116,7 @@ export async function PATCH(
       updatedAt: now,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Erro ao atualizar meta financeira';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Erro ao atualizar meta financeira.', 'goals:[id]:PATCH');
   }
 }
 
@@ -138,7 +138,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, deletedId: id });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Erro ao excluir meta financeira';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Erro ao excluir meta financeira.', 'goals:[id]:DELETE');
   }
 }

@@ -3,6 +3,7 @@ import { db, ensureDbInitialized } from '@/db';
 import { accounts, patrimonialAssets, patrimonialLiabilities, patrimonialSnapshots } from '@/db/schema';
 import { calculatePatrimonialSummary } from '@/lib/patrimony-engine';
 import { desc, asc } from 'drizzle-orm';
+import { handleApiError } from '@/lib/api-error';
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,8 +25,6 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error: unknown) {
-    console.error('Error fetching patrimonial data:', error);
-    const msg = error instanceof Error ? error.message : 'Falha ao consolidar dados patrimoniais';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return handleApiError(error, 'Falha ao consolidar dados patrimoniais.', 'patrimony:GET');
   }
 }

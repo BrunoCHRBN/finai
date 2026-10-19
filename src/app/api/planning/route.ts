@@ -7,11 +7,13 @@ import {
   transactions,
   goals,
   recurringFlows,
+  recurringOccurrences,
   patrimonialLiabilities,
   planningAlerts,
   planningPreferences,
 } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { handleApiError } from '@/lib/api-error';
 import {
   prepareCanonicalTransactions,
   calculateBudgetExecution,
@@ -41,6 +43,7 @@ export async function GET(request: NextRequest) {
       allTransactions,
       allGoals,
       allRecurring,
+      allOccurrences,
       allLiabilities,
       allPrefs,
       existingAlertRows,
@@ -51,6 +54,7 @@ export async function GET(request: NextRequest) {
       db.select().from(transactions),
       db.select().from(goals),
       db.select().from(recurringFlows),
+      db.select().from(recurringOccurrences),
       db.select().from(patrimonialLiabilities),
       db.select().from(planningPreferences),
       db.select().from(planningAlerts),
@@ -90,6 +94,7 @@ export async function GET(request: NextRequest) {
       liabilities: allLiabilities,
       goals: allGoals,
       minLiquidityThreshold: prefs.minLiquidityThreshold,
+      occurrences: allOccurrences,
     });
 
     // 5. Default Savings & FI Simulation based on current verified reserve and planned contributions
@@ -212,16 +217,14 @@ export async function GET(request: NextRequest) {
       goalsSummary,
       cashFlowProjection,
       recurringFlows: allRecurring,
+      accounts: allAccounts.map((a) => ({ id: a.id, name: a.name, type: a.type, balance: a.balance })),
       defaultSimulation,
       alerts: persistedAlerts,
       consultativeSnapshot,
       timestamp: now,
     });
   } catch (error: unknown) {
-    console.error('Error loading financial planning data:', error);
-    const message =
-      error instanceof Error ? error.message : 'Erro ao consolidar planejamento financeiro';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Erro ao consolidar planejamento financeiro.', 'planning:GET');
   }
 }
 
@@ -267,72 +270,145 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, fingerprint, status: newStatus });
     }
 
-    if (action === 'UPDATE_PREFERENCES') {
-      const minLiquidityThreshold = roundCurrency(
-        Math.max(0, safeNumeric(body.minLiquidityThreshold, 1000))
-      );
-      const budgetWarningPct = roundCurrency(
-        Math.min(100, Math.max(10, safeNumeric(body.budgetWarningPct, 80)))
-      );
-      const budgetCriticalPct = roundCurrency(
-        Math.max(budgetWarningPct, safeNumeric(body.budgetCriticalPct, 100))
-      );
-      const maxDataStalenessDays = Math.max(
-        1,
-        Math.round(safeNumeric(body.maxDataStalenessDays, 7))
-      );
-      const liabilityDueSoonDays = Math.max(
-        1,
-        Math.round(safeNumeric(body.liabilityDueSoonDays, 7))
-      );
-      const now = new Date().toISOString();
-
-      const existing = await db
-        .select()
-        .from(planningPreferences)
-        .where(eq(planningPreferences.id, 'default'));
-
-      if (existing.length > 0) {
-        await db
-          .update(planningPreferences)
-          .set({
-            minLiquidityThreshold,
-            budgetWarningPct,
-            budgetCriticalPct,
-            maxDataStalenessDays,
-            liabilityDueSoonDays,
-            updatedAt: now,
-          })
-          .where(eq(planningPreferences.id, 'default'));
-      } else {
-        await db.insert(planningPreferences).values({
-          id: 'default',
-          minLiquidityThreshold,
-          budgetWarningPct,
-          budgetCriticalPct,
-          maxDataStalenessDays,
-          liabilityDueSoonDays,
-          updatedAt: now,
-        });
-      }
-
-      return NextResponse.json({
-        success: true,
-        preferences: {
-          id: 'default',
-          minLiquidityThreshold,
-          budgetWarningPct,
-          budgetCriticalPct,
-          maxDataStalenessDays,
-          liabilityDueSoonDays,
-          updatedAt: now,
-        },
-      });
+    if (
+      action === 'UPDATE_PREFERENCES' ||
+      action === 'PREFERENCES' ||
+      body.syncIntervalMinutes !== undefined ||
+      body.minLiquidityThreshold !== undefined
+    ) {
+      return await handleUpdatePreferences(body);
     }
 
     return NextResponse.json({ error: 'Ação inválida' }, { status: 400 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Erro ao processar operação de planejamento';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Erro ao processar operação de planejamento.', 'planning:POST');
   }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    await ensureDbInitialized();
+    const body = await request.json().catch(() => ({}));
+    const action = String(body.action || 'PREFERENCES').toUpperCase();
+
+    if (
+      action === 'PREFERENCES' ||
+      action === 'UPDATE_PREFERENCES' ||
+      body.syncIntervalMinutes !== undefined ||
+      body.minLiquidityThreshold !== undefined
+    ) {
+      return await handleUpdatePreferences(body);
+    }
+
+    if (action === 'DISMISS_ALERT' || action === 'RESTORE_ALERT') {
+      const fingerprint = body.fingerprint;
+      if (!fingerprint) {
+        return NextResponse.json({ error: 'fingerprint is required' }, { status: 400 });
+      }
+      const newStatus = action === 'DISMISS_ALERT' ? 'DISMISSED' : 'ACTIVE';
+      const now = new Date().toISOString();
+      await db
+        .update(planningAlerts)
+        .set({ status: newStatus, updatedAt: now })
+        .where(eq(planningAlerts.fingerprint, fingerprint));
+
+      return NextResponse.json({ success: true, fingerprint, status: newStatus });
+    }
+
+    return NextResponse.json({ error: 'Ação inválida para PATCH' }, { status: 400 });
+  } catch (error: unknown) {
+    return handleApiError(error, 'Erro ao atualizar preferências de planejamento.', 'planning:PATCH');
+  }
+}
+
+async function handleUpdatePreferences(body: Record<string, any>) {
+  const existing = await db
+    .select()
+    .from(planningPreferences)
+    .where(eq(planningPreferences.id, 'default'));
+  const current = existing[0];
+
+  const minLiquidityThreshold =
+    body.minLiquidityThreshold !== undefined
+      ? roundCurrency(Math.max(0, safeNumeric(body.minLiquidityThreshold, 1000)))
+      : (current?.minLiquidityThreshold ?? 1000);
+
+  const budgetWarningPct =
+    body.budgetWarningPct !== undefined
+      ? roundCurrency(Math.min(100, Math.max(10, safeNumeric(body.budgetWarningPct, 80))))
+      : (current?.budgetWarningPct ?? 80);
+
+  const budgetCriticalPct =
+    body.budgetCriticalPct !== undefined
+      ? roundCurrency(Math.max(budgetWarningPct, safeNumeric(body.budgetCriticalPct, 100)))
+      : (current?.budgetCriticalPct ?? 100);
+
+  const maxDataStalenessDays =
+    body.maxDataStalenessDays !== undefined
+      ? Math.max(1, Math.round(safeNumeric(body.maxDataStalenessDays, 7)))
+      : (current?.maxDataStalenessDays ?? 7);
+
+  const liabilityDueSoonDays =
+    body.liabilityDueSoonDays !== undefined
+      ? Math.max(1, Math.round(safeNumeric(body.liabilityDueSoonDays, 7)))
+      : (current?.liabilityDueSoonDays ?? 7);
+
+  // syncIntervalMinutes: 0 = Manual, otherwise minutes between 15 and 10080
+  let resolvedSyncInterval = current?.syncIntervalMinutes ?? 0;
+  let nextScheduledSyncAt = current?.nextScheduledSyncAt ?? null;
+
+  if (body.syncIntervalMinutes !== undefined) {
+    const rawVal = Math.round(safeNumeric(body.syncIntervalMinutes, 0));
+    resolvedSyncInterval = rawVal <= 0 ? 0 : Math.min(10080, Math.max(15, rawVal));
+    nextScheduledSyncAt =
+      resolvedSyncInterval > 0
+        ? new Date(Date.now() + resolvedSyncInterval * 60 * 1000).toISOString()
+        : null;
+  }
+
+  const now = new Date().toISOString();
+
+  if (existing.length > 0) {
+    await db
+      .update(planningPreferences)
+      .set({
+        minLiquidityThreshold,
+        budgetWarningPct,
+        budgetCriticalPct,
+        maxDataStalenessDays,
+        liabilityDueSoonDays,
+        syncIntervalMinutes: resolvedSyncInterval,
+        nextScheduledSyncAt,
+        updatedAt: now,
+      })
+      .where(eq(planningPreferences.id, 'default'));
+  } else {
+    await db.insert(planningPreferences).values({
+      id: 'default',
+      minLiquidityThreshold,
+      budgetWarningPct,
+      budgetCriticalPct,
+      maxDataStalenessDays,
+      liabilityDueSoonDays,
+      syncIntervalMinutes: resolvedSyncInterval,
+      nextScheduledSyncAt,
+      updatedAt: now,
+    });
+  }
+
+  return NextResponse.json({
+    success: true,
+    preferences: {
+      id: 'default',
+      minLiquidityThreshold,
+      budgetWarningPct,
+      budgetCriticalPct,
+      maxDataStalenessDays,
+      liabilityDueSoonDays,
+      syncIntervalMinutes: resolvedSyncInterval,
+      lastSyncAt: current?.lastSyncAt ?? null,
+      nextScheduledSyncAt,
+      updatedAt: now,
+    },
+  });
 }

@@ -6,6 +6,7 @@ import {
   transactions,
   goals,
   recurringFlows,
+  recurringOccurrences,
   patrimonialAssets,
   patrimonialLiabilities,
   planningPreferences,
@@ -55,6 +56,7 @@ export async function loadOrBuildConsultativeSnapshot(
     allTransactions,
     allGoals,
     allRecurring,
+    allOccurrences,
     allAssets,
     allLiabilities,
     allPrefs,
@@ -65,6 +67,7 @@ export async function loadOrBuildConsultativeSnapshot(
     db.select().from(transactions),
     db.select().from(goals),
     db.select().from(recurringFlows),
+    db.select().from(recurringOccurrences),
     db.select().from(patrimonialAssets),
     db.select().from(patrimonialLiabilities),
     db.select().from(planningPreferences),
@@ -123,7 +126,22 @@ export async function loadOrBuildConsultativeSnapshot(
         `${g.id}:${g.currentAmount}:${g.targetAmount}:${g.plannedMonthlyContribution}:${g.status || 'ACTIVE'}`
     )
     .join(';');
-  const stateDigest = `${txDigest}#${budgetDigest}#${catDigest}#${goalDigest}`;
+  const recurringDigest = allRecurring
+    .map(
+      (r) =>
+        `${r.id}:${r.type}:${r.amount}:${r.frequency}:${r.dayOfMonth ?? ''}:${r.secondDayOfMonth ?? ''}:${r.status || ''}:${r.isActive ?? 1}:${r.nextDate || ''}:${r.amountType || ''}`
+    )
+    .join(';');
+  const occDigest = allOccurrences
+    .map(
+      (o) =>
+        `${o.id}:${o.status}:${o.expectedDate}:${o.expectedAmount}:${o.reconciledAmount ?? ''}:${o.transactionId || ''}`
+    )
+    .join(';');
+  const prefDigest = allPrefs
+    .map((p) => `${p.id}:${p.syncIntervalMinutes ?? 0}:${p.lastSyncAt ?? ''}`)
+    .join(';');
+  const stateDigest = `${txDigest}#${budgetDigest}#${catDigest}#${goalDigest}#${recurringDigest}#${occDigest}#${prefDigest}`;
 
   const fingerprint = computeSnapshotDataFingerprint({
     period: `${period}:h${horizonMonths}`,
@@ -266,6 +284,7 @@ export async function loadOrBuildConsultativeSnapshot(
     liabilities: allLiabilities,
     goals: allGoals,
     minLiquidityThreshold: prefs.minLiquidityThreshold,
+    occurrences: allOccurrences,
   });
 
   const savingsSimulation = simulateSavingsScenarios({

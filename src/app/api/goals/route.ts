@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { db, ensureDbInitialized } from '@/db';
 import { goals, accounts } from '@/db/schema';
 import { evaluateFinancialGoals, roundCurrency, safeNumeric } from '@/lib/planning-engine';
+import { handleApiError } from '@/lib/api-error';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,8 +20,7 @@ export async function GET(request: NextRequest) {
       summary,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Erro ao listar metas financeiras';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Erro ao listar metas financeiras.', 'goals:GET');
   }
 }
 
@@ -101,7 +101,6 @@ export async function POST(request: Request) {
       },
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Erro ao criar meta financeira';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Erro ao criar meta financeira.', 'goals:POST');
   }
 }

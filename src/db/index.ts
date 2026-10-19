@@ -202,13 +202,37 @@ export async function ensureDbInitialized() {
       nature TEXT NOT NULL DEFAULT 'CONFIRMED',
       category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
       amount REAL NOT NULL,
+      amount_type TEXT NOT NULL DEFAULT 'FIXED',
       frequency TEXT NOT NULL DEFAULT 'MONTHLY',
       day_of_month INTEGER DEFAULT 5,
+      start_date TEXT,
+      next_date TEXT,
+      end_date TEXT,
       start_month TEXT NOT NULL,
       end_month TEXT,
       total_installments INTEGER,
       remaining_installments INTEGER,
       is_active INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'ACTIVE',
+      destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+      income_category TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS recurring_occurrences (
+      id TEXT PRIMARY KEY,
+      flow_id TEXT NOT NULL REFERENCES recurring_flows(id) ON DELETE CASCADE,
+      expected_date TEXT NOT NULL,
+      expected_amount REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+      reconciled_amount REAL,
+      reconciled_at TEXT,
+      confidence_score REAL,
       notes TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -239,9 +263,75 @@ export async function ensureDbInitialized() {
       budget_critical_pct REAL NOT NULL DEFAULT 100,
       max_data_staleness_days INTEGER NOT NULL DEFAULT 7,
       liability_due_soon_days INTEGER NOT NULL DEFAULT 7,
+      sync_interval_minutes INTEGER NOT NULL DEFAULT 0,
+      last_sync_at TEXT,
+      next_scheduled_sync_at TEXT,
       updated_at TEXT NOT NULL
     );
   `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS processed_webhook_events (
+      id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      item_id TEXT,
+      payload_hash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PROCESSING',
+      error_message TEXT,
+      processed_at TEXT NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS market_assets (
+      id TEXT PRIMARY KEY,
+      symbol TEXT NOT NULL,
+      name TEXT NOT NULL,
+      asset_type TEXT NOT NULL,
+      market TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'BRL',
+      logo_url TEXT,
+      sector TEXT,
+      sub_type TEXT,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS market_quotes_cache (
+      id TEXT PRIMARY KEY,
+      asset_id TEXT NOT NULL REFERENCES market_assets(id) ON DELETE CASCADE,
+      price REAL NOT NULL,
+      change_24h_pct REAL NOT NULL DEFAULT 0,
+      change_24h_amount REAL NOT NULL DEFAULT 0,
+      day_high REAL,
+      day_low REAL,
+      volume_24h REAL,
+      market_cap REAL,
+      quote_timestamp TEXT NOT NULL,
+      fetched_at TEXT NOT NULL,
+      raw_payload_json TEXT
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS market_watchlist (
+      id TEXT PRIMARY KEY,
+      asset_id TEXT NOT NULL REFERENCES market_assets(id) ON DELETE CASCADE,
+      target_price_alert_high REAL,
+      target_price_alert_low REAL,
+      notes TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+
+  const webhookColsRes = await client.execute('PRAGMA table_info(processed_webhook_events);');
+  const webhookCols = new Set(webhookColsRes.rows.map((r: any) => r.name));
+  if (!webhookCols.has('error_message')) {
+    await client.execute('ALTER TABLE processed_webhook_events ADD COLUMN error_message TEXT;');
+  }
 
   // 3. Check if existing transactions table needs schema evolution (transfer_id & foreign keys)
   const columnsRes = await client.execute('PRAGMA table_info(transactions);');
@@ -314,6 +404,47 @@ export async function ensureDbInitialized() {
     await client.execute('ALTER TABLE goals ADD COLUMN updated_at TEXT;');
   }
 
+  // 3d. Non-destructive schema evolution for recurring_flows (Sprint 7)
+  const recurringColsRes = await client.execute('PRAGMA table_info(recurring_flows);');
+  const recurringCols = new Set(recurringColsRes.rows.map((r: any) => r.name));
+  if (!recurringCols.has('amount_type')) {
+    await client.execute("ALTER TABLE recurring_flows ADD COLUMN amount_type TEXT NOT NULL DEFAULT 'FIXED';");
+  }
+  if (!recurringCols.has('start_date')) {
+    await client.execute('ALTER TABLE recurring_flows ADD COLUMN start_date TEXT;');
+  }
+  if (!recurringCols.has('next_date')) {
+    await client.execute('ALTER TABLE recurring_flows ADD COLUMN next_date TEXT;');
+  }
+  if (!recurringCols.has('end_date')) {
+    await client.execute('ALTER TABLE recurring_flows ADD COLUMN end_date TEXT;');
+  }
+  if (!recurringCols.has('status')) {
+    await client.execute("ALTER TABLE recurring_flows ADD COLUMN status TEXT NOT NULL DEFAULT 'ACTIVE';");
+  }
+  if (!recurringCols.has('destination_account_id')) {
+    await client.execute('ALTER TABLE recurring_flows ADD COLUMN destination_account_id TEXT;');
+  }
+  if (!recurringCols.has('income_category')) {
+    await client.execute('ALTER TABLE recurring_flows ADD COLUMN income_category TEXT;');
+  }
+  if (!recurringCols.has('second_day_of_month')) {
+    await client.execute('ALTER TABLE recurring_flows ADD COLUMN second_day_of_month INTEGER;');
+  }
+
+  // 3e. Non-destructive schema evolution for planning_preferences (Sprint 7)
+  const prefColsRes = await client.execute('PRAGMA table_info(planning_preferences);');
+  const prefCols = new Set(prefColsRes.rows.map((r: any) => r.name));
+  if (!prefCols.has('sync_interval_minutes')) {
+    await client.execute('ALTER TABLE planning_preferences ADD COLUMN sync_interval_minutes INTEGER NOT NULL DEFAULT 0;');
+  }
+  if (!prefCols.has('last_sync_at')) {
+    await client.execute('ALTER TABLE planning_preferences ADD COLUMN last_sync_at TEXT;');
+  }
+  if (!prefCols.has('next_scheduled_sync_at')) {
+    await client.execute('ALTER TABLE planning_preferences ADD COLUMN next_scheduled_sync_at TEXT;');
+  }
+
   // 4. Create required indexes and unique constraints for idempotent synchronization
   await client.execute('CREATE INDEX IF NOT EXISTS transactions_account_id_idx ON transactions(account_id);');
   await client.execute('CREATE INDEX IF NOT EXISTS transactions_date_idx ON transactions(date);');
@@ -333,8 +464,22 @@ export async function ensureDbInitialized() {
   await client.execute('CREATE INDEX IF NOT EXISTS patrimonial_snapshots_month_idx ON patrimonial_snapshots(month);');
   await client.execute('CREATE INDEX IF NOT EXISTS recurring_flows_type_idx ON recurring_flows(type);');
   await client.execute('CREATE INDEX IF NOT EXISTS recurring_flows_active_idx ON recurring_flows(is_active);');
+  await client.execute('CREATE INDEX IF NOT EXISTS recurring_flows_status_idx ON recurring_flows(status);');
+  await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS recurring_occurrences_flow_date_unique ON recurring_occurrences(flow_id, expected_date);');
+  await client.execute('CREATE INDEX IF NOT EXISTS recurring_occurrences_flow_id_idx ON recurring_occurrences(flow_id);');
+  await client.execute('CREATE INDEX IF NOT EXISTS recurring_occurrences_expected_date_idx ON recurring_occurrences(expected_date);');
+  await client.execute('CREATE INDEX IF NOT EXISTS recurring_occurrences_status_idx ON recurring_occurrences(status);');
+  await client.execute('CREATE INDEX IF NOT EXISTS recurring_occurrences_transaction_id_idx ON recurring_occurrences(transaction_id);');
   await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS planning_alerts_fingerprint_unique ON planning_alerts(fingerprint);');
   await client.execute('CREATE INDEX IF NOT EXISTS planning_alerts_period_idx ON planning_alerts(period);');
+  await client.execute('CREATE INDEX IF NOT EXISTS processed_webhook_events_item_id_idx ON processed_webhook_events(item_id);');
+  await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS market_assets_symbol_market_unique ON market_assets(symbol, market);');
+  await client.execute('CREATE INDEX IF NOT EXISTS market_assets_type_idx ON market_assets(asset_type);');
+  await client.execute('CREATE INDEX IF NOT EXISTS market_assets_market_idx ON market_assets(market);');
+  await client.execute('CREATE INDEX IF NOT EXISTS market_quotes_cache_asset_id_idx ON market_quotes_cache(asset_id);');
+  await client.execute('CREATE INDEX IF NOT EXISTS market_quotes_cache_fetched_at_idx ON market_quotes_cache(fetched_at);');
+  await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS market_watchlist_asset_id_unique ON market_watchlist(asset_id);');
+  await client.execute('CREATE INDEX IF NOT EXISTS market_watchlist_sort_order_idx ON market_watchlist(sort_order);');
 
   // 5. Seed default categories if none exist
   const existingCategories = await client.execute('SELECT COUNT(*) as count FROM categories');

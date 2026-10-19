@@ -20,6 +20,7 @@ import {
   Info,
   Sliders,
   Calendar,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -49,6 +50,7 @@ type PlanningSection =
   | 'budgets'
   | 'goals'
   | 'cashflow'
+  | 'recurring'
   | 'simulator'
   | 'alerts';
 
@@ -88,17 +90,33 @@ export function BudgetsView({
   const [goalStatus, setGoalStatus] = useState<string>('ACTIVE');
   const [isSavingGoal, setIsSavingGoal] = useState<boolean>(false);
 
-  // Recurring flow form state
+  // Recurring flow and occurrences state
   const [isRecurringFormOpen, setIsRecurringFormOpen] = useState<boolean>(false);
+  const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
   const [recTitle, setRecTitle] = useState<string>('');
   const [recType, setRecType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [recNature, setRecNature] = useState<'CONFIRMED' | 'ESTIMATED'>('CONFIRMED');
   const [recAmount, setRecAmount] = useState<string>('');
-  const [recFrequency, setRecFrequency] = useState<'MONTHLY' | 'ONCE'>('MONTHLY');
+  const [recAmountType, setRecAmountType] = useState<'FIXED' | 'VARIABLE'>('FIXED');
+  const [recFrequency, setRecFrequency] = useState<
+    'WEEKLY' | 'BIWEEKLY' | 'SEMIMONTHLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUAL' | 'ONCE'
+  >('MONTHLY');
+  const [recDayOfMonth, setRecDayOfMonth] = useState<string>('5');
+  const [recSecondDayOfMonth, setRecSecondDayOfMonth] = useState<string>('20');
+  const [recStartDate, setRecStartDate] = useState<string>('');
+  const [recNextDate, setRecNextDate] = useState<string>('');
+  const [recEndDate, setRecEndDate] = useState<string>('');
   const [recStartMonth, setRecStartMonth] = useState<string>(propMonth || '2026-10');
   const [recEndMonth, setRecEndMonth] = useState<string>('');
   const [recInstallments, setRecInstallments] = useState<string>('');
+  const [recDestinationAccountId, setRecDestinationAccountId] = useState<string>('');
+  const [recIncomeCategory, setRecIncomeCategory] = useState<string>('SALARY');
   const [isSavingRecurring, setIsSavingRecurring] = useState<boolean>(false);
+
+  // Occurrences and reconciliation state
+  const [occurrencesList, setOccurrencesList] = useState<any[]>([]);
+  const [occFilter, setOccFilter] = useState<'ALL' | 'PENDING' | 'OVERDUE' | 'RECONCILED' | 'MANUALLY_CONFIRMED'>('ALL');
+  const [isReconciling, setIsReconciling] = useState<boolean>(false);
 
   // Simulator state
   const [simInitialCapital, setSimInitialCapital] = useState<string>('0');
@@ -143,6 +161,16 @@ export function BudgetsView({
         throw new Error(data.error || 'Erro ao carregar dados de planejamento');
       }
       setPlanningData(data);
+
+      try {
+        const occRes = await fetch('/api/planning/occurrences');
+        if (occRes.ok) {
+          const occData = await occRes.json();
+          setOccurrencesList(occData.occurrences || []);
+        }
+      } catch (occErr) {
+        console.warn('Erro ao carregar ocorrências:', occErr);
+      }
 
       if (!simInitialized && data.defaultSimulation) {
         setSimInitialCapital(String(data.defaultSimulation.inputs.initialCapital));
@@ -307,34 +335,96 @@ export function BudgetsView({
     e.preventDefault();
     setIsSavingRecurring(true);
     try {
-      const res = await fetch('/api/planning/recurring', {
-        method: 'POST',
+      const url = editingRecurringId
+        ? `/api/planning/recurring/${editingRecurringId}`
+        : '/api/planning/recurring';
+      const method = editingRecurringId ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: recTitle,
           type: recType,
           nature: recNature,
           amount: parseFloat(recAmount.replace(',', '.')),
+          amountType: recAmountType,
           frequency: recFrequency,
+          dayOfMonth: parseInt(recDayOfMonth, 10) || 5,
+          secondDayOfMonth: recFrequency === 'SEMIMONTHLY' ? (parseInt(recSecondDayOfMonth, 10) || 20) : null,
+          startDate: recStartDate || null,
+          nextDate: recNextDate || null,
+          endDate: recEndDate || null,
           startMonth: recStartMonth,
           endMonth: recEndMonth || null,
           totalInstallments: recInstallments ? parseInt(recInstallments, 10) : null,
           remainingInstallments: recInstallments ? parseInt(recInstallments, 10) : null,
+          destinationAccountId: recDestinationAccountId || null,
+          incomeCategory: recType === 'INCOME' ? recIncomeCategory : null,
+          status: 'ACTIVE',
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao registrar compromisso recorrente');
 
       setIsRecurringFormOpen(false);
+      setEditingRecurringId(null);
       setRecTitle('');
       setRecAmount('');
+      setRecType('EXPENSE');
+      setRecNature('CONFIRMED');
+      setRecAmountType('FIXED');
+      setRecFrequency('MONTHLY');
+      setRecDayOfMonth('5');
+      setRecSecondDayOfMonth('20');
       setRecEndMonth('');
       setRecInstallments('');
+      setRecStartDate('');
+      setRecNextDate('');
+      setRecEndDate('');
+      setRecDestinationAccountId('');
+      setRecIncomeCategory('SALARY');
       await fetchPlanningData();
+      if (onRefreshParent) await onRefreshParent();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Erro ao registrar fluxo recorrente');
     } finally {
       setIsSavingRecurring(false);
+    }
+  };
+
+  const handleEditRecurring = (rf: any) => {
+    setEditingRecurringId(rf.id);
+    setRecTitle(rf.title || '');
+    setRecType(rf.type || 'EXPENSE');
+    setRecNature(rf.nature || 'CONFIRMED');
+    setRecAmount(String(rf.amount || ''));
+    setRecAmountType(rf.amountType || 'FIXED');
+    setRecFrequency(rf.frequency || 'MONTHLY');
+    setRecDayOfMonth(String(rf.dayOfMonth || 5));
+    setRecSecondDayOfMonth(rf.secondDayOfMonth ? String(rf.secondDayOfMonth) : '20');
+    setRecStartDate(rf.startDate || '');
+    setRecNextDate(rf.nextDate || '');
+    setRecEndDate(rf.endDate || '');
+    setRecStartMonth(rf.startMonth || selectedMonth);
+    setRecEndMonth(rf.endMonth || '');
+    setRecInstallments(rf.totalInstallments ? String(rf.totalInstallments) : '');
+    setRecDestinationAccountId(rf.destinationAccountId || '');
+    setRecIncomeCategory(rf.incomeCategory || 'SALARY');
+    setIsRecurringFormOpen(true);
+  };
+
+  const handleEndRecurring = async (id: string) => {
+    try {
+      await fetch(`/api/planning/recurring/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ENDED', isActive: 0 }),
+      });
+      await fetchPlanningData();
+      if (onRefreshParent) await onRefreshParent();
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -346,6 +436,7 @@ export function BudgetsView({
         body: JSON.stringify({ isActive: currentActive === 1 ? 0 : 1 }),
       });
       await fetchPlanningData();
+      if (onRefreshParent) await onRefreshParent();
     } catch (err) {
       console.error(err);
     }
@@ -355,8 +446,78 @@ export function BudgetsView({
     try {
       await fetch(`/api/planning/recurring/${id}`, { method: 'DELETE' });
       await fetchPlanningData();
+      if (onRefreshParent) await onRefreshParent();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // --- Occurrence Reconciliation handlers ---
+  const handleReconcile = async (occurrenceId: string, transactionId: string, amount?: number) => {
+    setIsReconciling(true);
+    try {
+      const res = await fetch('/api/planning/occurrences/reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          occurrenceId,
+          action: 'RECONCILE',
+          transactionId,
+          reconciledAmount: amount,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao conciliar ocorrência');
+      await fetchPlanningData();
+      if (onRefreshParent) await onRefreshParent();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Erro ao conciliar');
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
+  const handleManualConfirm = async (occurrenceId: string) => {
+    setIsReconciling(true);
+    try {
+      const res = await fetch('/api/planning/occurrences/reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          occurrenceId,
+          action: 'MANUALLY_CONFIRM',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao confirmar ocorrência');
+      await fetchPlanningData();
+      if (onRefreshParent) await onRefreshParent();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Erro ao confirmar');
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
+  const handleUnreconcile = async (occurrenceId: string) => {
+    setIsReconciling(true);
+    try {
+      const res = await fetch('/api/planning/occurrences/reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          occurrenceId,
+          action: 'UNRECONCILE',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao desfazer conciliação');
+      await fetchPlanningData();
+      if (onRefreshParent) await onRefreshParent();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Erro ao desfazer conciliação');
+    } finally {
+      setIsReconciling(false);
     }
   };
 
@@ -468,15 +629,278 @@ export function BudgetsView({
   const activeAlerts = alerts.filter((a) => a.status === 'ACTIVE');
   const staleAlerts = activeAlerts.filter((a) => a.type === 'STALE_FINANCIAL_DATA');
   const recurringList: any[] = planningData?.recurringFlows || [];
+  const overdueOccurrencesCount = occurrencesList.filter((o) => o.status === 'OVERDUE').length;
 
   const navTabs: Array<{ id: PlanningSection; label: string; icon: any; badge?: number }> = [
     { id: 'overview', label: 'Visão Geral', icon: Layers },
     { id: 'budgets', label: 'Orçamentos', icon: PieChart, badge: budgetSummary?.overBudgetCount || undefined },
     { id: 'goals', label: 'Metas Financeiras', icon: Target, badge: goalsSummary?.activeGoalsCount || undefined },
     { id: 'cashflow', label: 'Fluxo de Caixa Projetado', icon: TrendingUp },
+    { id: 'recurring', label: 'Rendas & Recorrências', icon: Calendar, badge: overdueOccurrencesCount || undefined },
     { id: 'simulator', label: 'Simulador & IF', icon: Calculator },
     { id: 'alerts', label: 'Alertas & Limites', icon: Bell, badge: activeAlerts.length || undefined },
   ];
+
+  const resetRecurringForm = () => {
+    setIsRecurringFormOpen(false);
+    setEditingRecurringId(null);
+    setRecTitle('');
+    setRecAmount('');
+    setRecType('EXPENSE');
+    setRecNature('CONFIRMED');
+    setRecAmountType('FIXED');
+    setRecFrequency('MONTHLY');
+    setRecDayOfMonth('5');
+    setRecStartDate('');
+    setRecNextDate('');
+    setRecEndDate('');
+    setRecStartMonth(selectedMonth || '2026-10');
+    setRecEndMonth('');
+    setRecInstallments('');
+    setRecDestinationAccountId('');
+    setRecIncomeCategory('SALARY');
+  };
+
+  const renderRecurringForm = () => {
+    if (!isRecurringFormOpen) return null;
+    return (
+      <form
+        onSubmit={handleSaveRecurring}
+        className="p-5 rounded-lg border border-[#253A32] bg-[#FFFFFF] space-y-4 text-xs shadow-xs"
+      >
+        <div className="flex items-center justify-between border-b border-[#E7E1D7] pb-2">
+          <h3 className="font-serif text-base font-bold text-[#242823]">
+            {editingRecurringId
+              ? 'Editar Compromisso ou Fluxo Recorrente'
+              : 'Novo Compromisso ou Fluxo Recorrente Configurado'}
+          </h3>
+          <button
+            type="button"
+            onClick={resetRecurringForm}
+            className="text-[#777A72] hover:text-[#242823] cursor-pointer"
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              Descrição *
+            </label>
+            <input
+              type="text"
+              required
+              value={recTitle}
+              onChange={(e) => setRecTitle(e.target.value)}
+              placeholder="Ex: Salário Mensal / Aluguel"
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              Direção do Fluxo *
+            </label>
+            <select
+              value={recType}
+              onChange={(e) => setRecType(e.target.value as 'INCOME' | 'EXPENSE')}
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5]"
+            >
+              <option value="INCOME">Receita Recorrente (+)</option>
+              <option value="EXPENSE">Despesa / Compromisso (-)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              Classificação Epistêmica *
+            </label>
+            <select
+              value={recNature}
+              onChange={(e) => setRecNature(e.target.value as 'CONFIRMED' | 'ESTIMATED')}
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5]"
+            >
+              <option value="CONFIRMED">Confirmado / Programado (Base contratual)</option>
+              <option value="ESTIMATED">Estimado (Hipótese projetada)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              Valor (R$) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              value={recAmount}
+              onChange={(e) => setRecAmount(e.target.value)}
+              placeholder="2500.00"
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              Tipo de Valor *
+            </label>
+            <select
+              value={recAmountType}
+              onChange={(e) => setRecAmountType(e.target.value as 'FIXED' | 'VARIABLE')}
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5]"
+            >
+              <option value="FIXED">Fixo (Valor exato)</option>
+              <option value="VARIABLE">Variável (Média / Estimativa)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              Frequência
+            </label>
+            <select
+              value={recFrequency}
+              onChange={(e) => setRecFrequency(e.target.value as any)}
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5]"
+            >
+              <option value="WEEKLY">Semanal (a cada 7 dias)</option>
+              <option value="BIWEEKLY">A cada 14 dias (bi-semanal)</option>
+              <option value="SEMIMONTHLY">Semimensal (2 datas fixas no mês)</option>
+              <option value="MONTHLY">Mensal Recorrente</option>
+              <option value="QUARTERLY">Trimestral</option>
+              <option value="ANNUAL">Anual</option>
+              <option value="ONCE">Evento Único no Mês Inicial</option>
+            </select>
+          </div>
+
+          {recType === 'INCOME' && (
+            <div>
+              <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+                Categoria de Renda
+              </label>
+              <select
+                value={recIncomeCategory}
+                onChange={(e) => setRecIncomeCategory(e.target.value)}
+                className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5]"
+              >
+                <option value="SALARY">Salário / Remuneração CLT</option>
+                <option value="FREELANCE">Freelance / Prestação de Serviços</option>
+                <option value="RENT">Aluguéis Recebidos</option>
+                <option value="DIVIDENDS">Dividendos / Rendimentos</option>
+                <option value="BENEFIT">Benefício / Aposentadoria</option>
+                <option value="OTHER">Outras Receitas</option>
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              {recFrequency === 'SEMIMONTHLY' ? '1º Dia Previsto do Mês (1 - 31)' : 'Dia Previsto do Mês (1 - 31)'}
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="31"
+              value={recDayOfMonth}
+              onChange={(e) => setRecDayOfMonth(e.target.value)}
+              placeholder="5"
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
+            />
+          </div>
+
+          {recFrequency === 'SEMIMONTHLY' && (
+            <div>
+              <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+                2º Dia Previsto do Mês (1 - 31)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                value={recSecondDayOfMonth}
+                onChange={(e) => setRecSecondDayOfMonth(e.target.value)}
+                placeholder="20"
+                className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              Data de Início (Opcional)
+            </label>
+            <input
+              type="date"
+              value={recStartDate}
+              onChange={(e) => setRecStartDate(e.target.value)}
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              Mês Inicial (YYYY-MM)
+            </label>
+            <input
+              type="month"
+              value={recStartMonth}
+              onChange={(e) => setRecStartMonth(e.target.value)}
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              Mês Final Opcional
+            </label>
+            <input
+              type="month"
+              value={recEndMonth}
+              onChange={(e) => setRecEndMonth(e.target.value)}
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
+              Limite de Parcelas (Opcional)
+            </label>
+            <input
+              type="number"
+              min="1"
+              value={recInstallments}
+              onChange={(e) => setRecInstallments(e.target.value)}
+              placeholder="Ex: 10"
+              className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={resetRecurringForm}
+            className="px-3 py-1.5 rounded border border-[#E7E1D7] text-[#5F635C] cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={isSavingRecurring}
+            className="px-4 py-1.5 rounded bg-[#253A32] text-white font-medium cursor-pointer"
+          >
+            {isSavingRecurring
+              ? 'Salvando...'
+              : editingRecurringId
+              ? 'Salvar Alterações'
+              : 'Registrar Fluxo'}
+          </button>
+        </div>
+      </form>
+    );
+  };
 
   const availableMonths = ['2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12'];
 
@@ -1460,155 +1884,90 @@ export function BudgetsView({
             </button>
           </div>
 
-          {/* Recurring Flow Creation Form */}
-          {isRecurringFormOpen && (
-            <form
-              onSubmit={handleSaveRecurring}
-              className="p-5 rounded-lg border border-[#253A32] bg-[#FFFFFF] space-y-4 text-xs"
-            >
-              <div className="flex items-center justify-between border-b border-[#E7E1D7] pb-2">
-                <h3 className="font-serif text-base font-bold text-[#242823]">
-                  Novo Compromisso ou Fluxo Recorrente Configurado
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsRecurringFormOpen(false)}
-                  className="text-[#777A72]"
-                >
-                  Fechar
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
-                    Descrição *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={recTitle}
-                    onChange={(e) => setRecTitle(e.target.value)}
-                    placeholder="Ex: Salário Mensal / Aluguel"
-                    className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5]"
-                  />
+          {/* Sprint 7: 30 / 60 / 90 Days Horizon Projections */}
+          {cashFlow.horizonSummaries && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[
+                { key: 'days30', title: 'Horizonte 30 Dias', data: cashFlow.horizonSummaries.days30 },
+                { key: 'days60', title: 'Horizonte 60 Dias', data: cashFlow.horizonSummaries.days60 },
+                { key: 'days90', title: 'Horizonte 90 Dias', data: cashFlow.horizonSummaries.days90 },
+              ].map(({ key, title, data }) => (
+                <div key={key} className="p-4 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#777A72] uppercase">
+                    <span>{title}</span>
+                    <span className="font-mono text-[10px] text-[#5F635C]">Até {data.targetDate}</span>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-[#5F635C]">Saldo Fechamento Projetado</div>
+                    <div className={`text-2xl font-serif font-bold tabular-nums ${data.projectedClosingBalance < 0 ? 'text-[#963F36]' : 'text-[#245A3C]'}`}>
+                      {formatCurrency(data.projectedClosingBalance)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#F0EDE6] text-[11px] font-mono">
+                    <div>
+                      <span className="text-[#777A72]">Entradas: </span>
+                      <span className="text-[#245A3C] font-semibold">+{formatCurrency(data.projectedInflows)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[#777A72]">Saídas: </span>
+                      <span className="text-[#963F36] font-semibold">-{formatCurrency(data.projectedOutflows)}</span>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-[#777A72] pt-1 flex items-center justify-between">
+                    <span>Menor saldo: <strong className="font-mono text-[#242823]">{formatCurrency(data.lowestProjectedBalance)}</strong></span>
+                    {data.isNegativeLiquidity && (
+                      <span className="text-[#963F36] font-semibold">Alerta Liquidez</span>
+                    )}
+                  </div>
                 </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
-                    Direção do Fluxo *
-                  </label>
-                  <select
-                    value={recType}
-                    onChange={(e) => setRecType(e.target.value as 'INCOME' | 'EXPENSE')}
-                    className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5]"
-                  >
-                    <option value="INCOME">Receita Recorrente (+)</option>
-                    <option value="EXPENSE">Despesa / Compromisso (-)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
-                    Classificação Epistêmica *
-                  </label>
-                  <select
-                    value={recNature}
-                    onChange={(e) => setRecNature(e.target.value as 'CONFIRMED' | 'ESTIMATED')}
-                    className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5]"
-                  >
-                    <option value="CONFIRMED">Confirmado / Programado (Base contratual)</option>
-                    <option value="ESTIMATED">Estimado (Hipótese projetada)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
-                    Valor Mensal (R$) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    required
-                    value={recAmount}
-                    onChange={(e) => setRecAmount(e.target.value)}
-                    placeholder="2500.00"
-                    className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
-                    Frequência
-                  </label>
-                  <select
-                    value={recFrequency}
-                    onChange={(e) => setRecFrequency(e.target.value as 'MONTHLY' | 'ONCE')}
-                    className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5]"
-                  >
-                    <option value="MONTHLY">Mensal Recorrente</option>
-                    <option value="ONCE">Evento Único no Mês Inicial</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
-                    Mês Inicial (YYYY-MM)
-                  </label>
-                  <input
-                    type="month"
-                    value={recStartMonth}
-                    onChange={(e) => setRecStartMonth(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
-                    Mês Final Opcional
-                  </label>
-                  <input
-                    type="month"
-                    value={recEndMonth}
-                    onChange={(e) => setRecEndMonth(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#5F635C] mb-1">
-                    Limite de Parcelas (Opcional)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={recInstallments}
-                    onChange={(e) => setRecInstallments(e.target.value)}
-                    placeholder="Ex: 10"
-                    className="w-full px-3 py-1.5 rounded border border-[#D6CFC2] bg-[#FAF8F5] font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRecurringFormOpen(false)}
-                  className="px-3 py-1.5 rounded border border-[#E7E1D7] text-[#5F635C]"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingRecurring}
-                  className="px-4 py-1.5 rounded bg-[#253A32] text-white font-medium cursor-pointer"
-                >
-                  {isSavingRecurring ? 'Salvando...' : 'Registrar Fluxo'}
-                </button>
-              </div>
-            </form>
+              ))}
+            </div>
           )}
+
+          {/* Sprint 7: 8 Prospective Cash Flow Indicators */}
+          {cashFlow.indicators && (
+            <div className="p-4 rounded-lg border border-[#E7E1D7] bg-[#F6F3ED] shadow-xs grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 text-center">
+              <div>
+                <div className="text-[10px] uppercase font-semibold text-[#777A72]">Receita Realizada</div>
+                <div className="text-sm font-bold font-mono text-[#245A3C] mt-0.5">{formatCurrency(cashFlow.indicators.realizedIncomePeriod)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-semibold text-[#777A72]">Receita Prevista</div>
+                <div className="text-sm font-bold font-mono text-[#242823] mt-0.5">{formatCurrency(cashFlow.indicators.expectedIncomePeriod)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-semibold text-[#777A72]">Variação Real vs Prev</div>
+                <div className={`text-sm font-bold font-mono mt-0.5 ${cashFlow.indicators.varianceExpectationVsRealized >= 0 ? 'text-[#245A3C]' : 'text-[#963F36]'}`}>
+                  {cashFlow.indicators.varianceExpectationVsRealized >= 0 ? '+' : ''}{formatCurrency(cashFlow.indicators.varianceExpectationVsRealized)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-semibold text-[#777A72]">Renda Recorrente</div>
+                <div className="text-sm font-bold font-mono text-[#242823] mt-0.5">{formatCurrency(cashFlow.indicators.activeRecurringIncome)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-semibold text-[#777A72]">Receitas Vencidas</div>
+                <div className={`text-sm font-bold font-mono mt-0.5 ${cashFlow.indicators.overdueUnreconciledIncome > 0 ? 'text-[#963F36]' : 'text-[#777A72]'}`}>
+                  {formatCurrency(cashFlow.indicators.overdueUnreconciledIncome)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-semibold text-[#777A72]">Despesas Previstas</div>
+                <div className="text-sm font-bold font-mono text-[#963F36] mt-0.5">{formatCurrency(cashFlow.indicators.expectedExpensesPeriod)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-semibold text-[#777A72]">Comprometimento</div>
+                <div className="text-sm font-bold font-mono text-[#242823] mt-0.5">{cashFlow.indicators.futureCommitmentRatePct}%</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-semibold text-[#777A72]">Saldo Projetado Mês</div>
+                <div className="text-sm font-bold font-mono text-[#245A3C] mt-0.5">{formatCurrency(cashFlow.indicators.projectedClosingBalance)}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Recurring Flow Creation Form */}
+          {renderRecurringForm()}
 
           {/* Chart: Projected Balance Trajectory (Confirmado vs Projetado Total) */}
           <div className="p-5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs space-y-3">
@@ -1800,14 +2159,31 @@ export function BudgetsView({
                           {formatCurrency(rf.amount)}
                         </span>
                         <button
+                          onClick={() => handleEditRecurring(rf)}
+                          className="p-1 rounded text-[#253A32] hover:bg-[#E4EFE6] cursor-pointer"
+                          title="Editar compromisso"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                           onClick={() => handleToggleRecurring(rf.id, rf.isActive)}
                           className="px-2 py-0.5 rounded border border-[#E7E1D7] text-[10px] text-[#5F635C] cursor-pointer"
                         >
                           {rf.isActive === 1 ? 'Ativo' : 'Pausado'}
                         </button>
+                        {rf.status !== 'ENDED' && (
+                          <button
+                            onClick={() => handleEndRecurring(rf.id)}
+                            className="px-2 py-0.5 rounded border border-[#E7E1D7] text-[10px] text-[#777A72] hover:bg-[#F0EDE6] cursor-pointer"
+                            title="Encerrar compromisso"
+                          >
+                            Encerrar
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteRecurring(rf.id)}
                           className="p-1 rounded text-[#963F36] hover:bg-[#F8E8E5] cursor-pointer"
+                          title="Excluir compromisso"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1848,6 +2224,379 @@ export function BudgetsView({
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          SECTION: FONTES DE RENDA & RECORRÊNCIAS COM CONCILIAÇÃO
+         ===================================================================== */}
+      {activeSection === 'recurring' && (
+        <div className="space-y-6">
+          {/* Header & New Flow Button */}
+          <div className="p-4 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+            <div>
+              <h2 className="font-serif text-lg font-bold text-[#242823]">
+                Fontes de Renda, Recorrências & Conciliação
+              </h2>
+              <p className="text-[#5F635C] mt-0.5">
+                Controle de receitas previsíveis, compromissos periódicos e reconciliação com extrato bancário real.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                if (isRecurringFormOpen) {
+                  resetRecurringForm();
+                } else {
+                  resetRecurringForm();
+                  setRecType('INCOME');
+                  setIsRecurringFormOpen(true);
+                }
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#253A32] text-white font-medium cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Novo Fluxo Recorrente</span>
+            </button>
+          </div>
+
+          {/* Recurring Flow Creation / Edit Form */}
+          {renderRecurringForm()}
+
+          {/* Metric Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs space-y-1">
+              <div className="text-[11px] font-semibold text-[#777A72] uppercase">Renda Recorrente Ativa</div>
+              <div className="text-2xl font-serif font-bold text-[#245A3C] tabular-nums">
+                {formatCurrency(
+                  recurringList
+                    .filter((r) => r.type === 'INCOME' && r.isActive)
+                    .reduce((acc, r) => acc + (Number(r.amount) || 0), 0)
+                )}
+              </div>
+              <div className="text-[11px] text-[#5F635C]">Base mensal estimada ativa</div>
+            </div>
+
+            <div className="p-4 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs space-y-1">
+              <div className="text-[11px] font-semibold text-[#777A72] uppercase">Despesas Recorrentes</div>
+              <div className="text-2xl font-serif font-bold text-[#963F36] tabular-nums">
+                {formatCurrency(
+                  recurringList
+                    .filter((r) => r.type === 'EXPENSE' && r.isActive)
+                    .reduce((acc, r) => acc + (Number(r.amount) || 0), 0)
+                )}
+              </div>
+              <div className="text-[11px] text-[#5F635C]">Compromissos fixos e periódicos</div>
+            </div>
+
+            <div className="p-4 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs space-y-1">
+              <div className="text-[11px] font-semibold text-[#777A72] uppercase">Receitas Vencidas</div>
+              <div className={`text-2xl font-serif font-bold tabular-nums ${overdueOccurrencesCount > 0 ? 'text-[#963F36]' : 'text-[#242823]'}`}>
+                {overdueOccurrencesCount} pendente{overdueOccurrencesCount === 1 ? '' : 's'}
+              </div>
+              <div className="text-[11px] text-[#5F635C]">
+                {overdueOccurrencesCount > 0 ? 'Data prevista passou sem conciliação' : 'Nenhuma receita em atraso'}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs space-y-1">
+              <div className="text-[11px] font-semibold text-[#777A72] uppercase">Total de Fluxos Cadastrados</div>
+              <div className="text-2xl font-serif font-bold text-[#242823] tabular-nums">
+                {recurringList.length} fluxos
+              </div>
+              <div className="text-[11px] text-[#5F635C]">
+                {recurringList.filter((r) => r.type === 'INCOME').length} receitas / {recurringList.filter((r) => r.type === 'EXPENSE').length} despesas
+              </div>
+            </div>
+          </div>
+
+          {/* Occurrences Timeline & Reconciliation Feed */}
+          <div className="p-5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E7E1D7] pb-3">
+              <div>
+                <h3 className="font-serif text-base font-bold text-[#242823]">
+                  Cronograma de Ocorrências & Conciliação Inteligente
+                </h3>
+                <p className="text-xs text-[#5F635C]">
+                  Reconcilie parcelas e receitas previstas com movimentações do extrato bancário.
+                </p>
+              </div>
+
+              {/* Status Filter Tabs */}
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {[
+                  { key: 'ALL', label: 'Todas' },
+                  { key: 'PENDING', label: 'Previstas' },
+                  { key: 'OVERDUE', label: 'Vencidas' },
+                  { key: 'RECONCILED', label: 'Conciliadas' },
+                  { key: 'MANUALLY_CONFIRMED', label: 'Confirmadas Manual' },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setOccFilter(key as any)}
+                    className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer border ${
+                      occFilter === key
+                        ? 'bg-[#253A32] text-white border-[#253A32] font-semibold'
+                        : 'bg-[#F6F3ED] text-[#5F635C] border-[#E7E1D7]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Occurrences List */}
+            {occurrencesList.length === 0 ? (
+              <div className="p-8 text-center text-xs text-[#777A72]">
+                Nenhuma ocorrência gerada ainda. Crie um fluxo recorrente acima para acompanhar parcelas e vencimentos.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {occurrencesList
+                  .filter((occ) => occFilter === 'ALL' || occ.status === occFilter)
+                  .map((occ) => {
+                    const isIncome = occ.flowType === 'INCOME';
+                    const isOverdue = occ.status === 'OVERDUE';
+                    const isReconciled = occ.status === 'RECONCILED';
+                    const isManuallyConfirmed = occ.status === 'MANUALLY_CONFIRMED';
+
+                    let badgeCls = 'bg-[#F0EDE6] text-[#5F635C] border-[#E7E1D7]';
+                    let badgeLabel = 'Prevista';
+
+                    if (isOverdue) {
+                      badgeCls = 'bg-[#F8E8E5] text-[#963F36] border-[#EED0CC]';
+                      badgeLabel = 'Vencida sem Crédito';
+                    } else if (isReconciled) {
+                      badgeCls = 'bg-[#E4EFE6] text-[#245A3C] border-[#D1E2D4]';
+                      badgeLabel = 'Conciliada com Extrato';
+                    } else if (isManuallyConfirmed) {
+                      badgeCls = 'bg-[#EAF0F6] text-[#205493] border-[#D0E2F2]';
+                      badgeLabel = 'Confirmada Manualmente';
+                    }
+
+                    return (
+                      <div
+                        key={occ.id}
+                        className={`p-4 rounded-lg border transition-colors ${
+                          isOverdue
+                            ? 'border-[#EED0CC] bg-[#FFFBFB]'
+                            : isReconciled
+                            ? 'border-[#D1E2D4] bg-[#FBFDFB]'
+                            : 'border-[#E7E1D7] bg-[#FFFFFF]'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-semibold text-[#242823]">
+                                {occ.expectedDate}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${badgeCls}`}>
+                                {badgeLabel}
+                              </span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#F6F3ED] text-[#777A72]">
+                                {occ.frequency || 'MONTHLY'} • {occ.amountType || 'FIXED'}
+                              </span>
+                            </div>
+
+                            <div className="font-serif text-base font-bold text-[#242823]">
+                              {occ.flowTitle}
+                            </div>
+                          </div>
+
+                          <div className="text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center">
+                            <div className="text-xs text-[#777A72]">Valor Esperado</div>
+                            <div className={`text-lg font-serif font-bold tabular-nums ${isIncome ? 'text-[#245A3C]' : 'text-[#963F36]'}`}>
+                              {isIncome ? '+' : '-'}{formatCurrency(occ.expectedAmount)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Reconciled Information */}
+                        {isReconciled && occ.reconciledAmount && (
+                          <div className="mt-3 p-2.5 rounded bg-[#E4EFE6]/50 border border-[#D1E2D4] flex items-center justify-between text-xs font-sans">
+                            <div className="flex items-center gap-2 text-[#245A3C]">
+                              <CheckCircle2 className="w-4 h-4 shrink-0" />
+                              <span>
+                                Conciliado com sucesso • Valor: <strong>{formatCurrency(occ.reconciledAmount)}</strong>
+                                {occ.reconciledAt && ` em ${occ.reconciledAt.slice(0, 10)}`}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => handleUnreconcile(occ.id)}
+                              disabled={isReconciling}
+                              className="px-2.5 py-1 rounded border border-[#D1E2D4] bg-[#FFFFFF] hover:bg-[#F3F1EB] text-xs font-medium text-[#963F36] cursor-pointer"
+                            >
+                              Desfazer Conciliação
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Manually Confirmed Information */}
+                        {isManuallyConfirmed && (
+                          <div className="mt-3 p-2.5 rounded bg-[#EAF0F6]/50 border border-[#D0E2F2] flex items-center justify-between text-xs font-sans">
+                            <div className="flex items-center gap-2 text-[#205493]">
+                              <CheckCircle2 className="w-4 h-4 shrink-0" />
+                              <span>Confirmado manualmente sem vínculo com extrato bancário.</span>
+                            </div>
+                            <button
+                              onClick={() => handleUnreconcile(occ.id)}
+                              disabled={isReconciling}
+                              className="px-2.5 py-1 rounded border border-[#D0E2F2] bg-[#FFFFFF] hover:bg-[#F3F1EB] text-xs font-medium text-[#5F635C] cursor-pointer"
+                            >
+                              Desfazer
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Reconciliation Suggestion / Action for Pending or Overdue */}
+                        {(occ.status === 'PENDING' || occ.status === 'OVERDUE') && (
+                          <div className="mt-3 pt-3 border-t border-[#F0EDE6] space-y-2">
+                            {occ.bestMatch ? (
+                              <div className="p-3 rounded-md bg-[#FAF8F5] border border-[#E7E1D7] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-[#242823]">
+                                      Transação Correspondente Sugerida
+                                    </span>
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-[#E4EFE6] text-[#245A3C] font-bold">
+                                      Score: {Math.round(occ.bestMatch.score * 100)}%
+                                    </span>
+                                    {occ.isAmbiguous && (
+                                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-[#F8E8E5] text-[#963F36] border border-[#EED0CC]">
+                                        Ambiguidade: Múltiplas similares
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-[#5F635C]">
+                                    {occ.bestMatch.transactionDate} • {occ.bestMatch.transactionDescription} •{' '}
+                                    <strong className="text-[#242823] font-mono">{formatCurrency(occ.bestMatch.transactionAmount)}</strong>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleReconcile(occ.id, occ.bestMatch.transactionId, occ.bestMatch.transactionAmount)}
+                                    disabled={isReconciling}
+                                    className="px-3 py-1.5 rounded bg-[#253A32] text-white font-medium hover:bg-[#1B2B25] transition-colors cursor-pointer text-xs"
+                                  >
+                                    Conciliar com esta transação
+                                  </button>
+                                  <button
+                                    onClick={() => handleManualConfirm(occ.id)}
+                                    disabled={isReconciling}
+                                    className="px-2.5 py-1.5 rounded border border-[#E7E1D7] bg-[#FFFFFF] hover:bg-[#F3F1EB] text-xs text-[#5F635C] cursor-pointer"
+                                  >
+                                    Confirmar Manual
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between text-xs text-[#777A72]">
+                                <span>Nenhuma transação correspondente detectada automaticamente no extrato recente.</span>
+                                <button
+                                  onClick={() => handleManualConfirm(occ.id)}
+                                  disabled={isReconciling}
+                                  className="px-2.5 py-1 rounded border border-[#E7E1D7] bg-[#FFFFFF] hover:bg-[#F3F1EB] text-xs text-[#5F635C] cursor-pointer"
+                                >
+                                  Confirmar Manualmente
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+
+          {/* Configured Recurring Flows Table */}
+          <div className="p-5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs space-y-3">
+            <h3 className="font-serif text-base font-bold text-[#242823]">
+              Fluxos Recorrentes e Fontes de Renda Configurados ({recurringList.length})
+            </h3>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-sans border-collapse">
+                <thead>
+                  <tr className="border-b border-[#E7E1D7] text-[#777A72] text-[11px] font-semibold uppercase">
+                    <th className="py-2.5 px-3">Título / Descrição</th>
+                    <th className="py-2.5 px-3">Tipo</th>
+                    <th className="py-2.5 px-3">Periodicidade</th>
+                    <th className="py-2.5 px-3">Valor / Natureza</th>
+                    <th className="py-2.5 px-3">Vigência</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E7E1D7]">
+                  {recurringList.map((rf) => (
+                    <tr key={rf.id} className="hover:bg-[#F3F1EB] transition-colors">
+                      <td className="py-3 px-3 font-semibold text-[#242823]">{rf.title}</td>
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${rf.type === 'INCOME' ? 'bg-[#E4EFE6] text-[#245A3C]' : 'bg-[#F8E8E5] text-[#963F36]'}`}>
+                          {rf.type === 'INCOME' ? 'Receita' : 'Despesa'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-[#5F635C] font-mono">{rf.frequency || 'MONTHLY'}</td>
+                      <td className="py-3 px-3 font-mono font-bold">
+                        <span className={rf.type === 'INCOME' ? 'text-[#245A3C]' : 'text-[#963F36]'}>
+                          {formatCurrency(Number(rf.amount) || 0)}
+                        </span>
+                        <span className="text-[10px] text-[#777A72] font-sans font-normal ml-1">
+                          ({rf.nature || 'CONFIRMED'})
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] text-[#5F635C]">
+                        {rf.startDate || rf.startMonth} {rf.endDate ? `até ${rf.endDate}` : ''}
+                      </td>
+                      <td className="py-3 px-3">
+                        <button
+                          onClick={() => handleToggleRecurring(rf.id, rf.isActive)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                            rf.isActive
+                              ? 'bg-[#E4EFE6] text-[#245A3C] border border-[#D1E2D4]'
+                              : 'bg-[#F0EDE6] text-[#777A72] border border-[#E7E1D7]'
+                          }`}
+                        >
+                          {rf.isActive ? 'Ativo' : 'Pausado'}
+                        </button>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleEditRecurring(rf)}
+                            className="p-1 rounded text-[#253A32] hover:bg-[#E4EFE6] cursor-pointer"
+                            title="Editar fluxo"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          {rf.status !== 'ENDED' && (
+                            <button
+                              onClick={() => handleEndRecurring(rf.id)}
+                              className="px-2 py-0.5 rounded border border-[#E7E1D7] text-[10px] text-[#777A72] hover:bg-[#F0EDE6] cursor-pointer"
+                              title="Encerrar fluxo"
+                            >
+                              Encerrar
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteRecurring(rf.id)}
+                            className="p-1 rounded text-[#963F36] hover:bg-[#F8E8E5] cursor-pointer"
+                            title="Excluir fluxo"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

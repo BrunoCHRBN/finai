@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db, ensureDbInitialized } from '@/db';
 import { patrimonialAssets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { handleApiError } from '@/lib/api-error';
 
 export async function PUT(
   request: Request,
@@ -65,9 +66,7 @@ export async function PUT(
     const updated = await db.select().from(patrimonialAssets).where(eq(patrimonialAssets.id, id)).limit(1);
     return NextResponse.json({ success: true, asset: updated[0] });
   } catch (error: unknown) {
-    console.error('Error updating patrimonial asset:', error);
-    const msg = error instanceof Error ? error.message : 'Falha ao atualizar ativo';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return handleApiError(error, 'Falha ao atualizar ativo.', 'patrimony:assets:[id]:PUT');
   }
 }
 
@@ -87,8 +86,6 @@ export async function DELETE(
     await db.delete(patrimonialAssets).where(eq(patrimonialAssets.id, id));
     return NextResponse.json({ success: true, message: 'Ativo removido com sucesso' });
   } catch (error: unknown) {
-    console.error('Error deleting patrimonial asset:', error);
-    const msg = error instanceof Error ? error.message : 'Falha ao remover ativo';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return handleApiError(error, 'Falha ao remover ativo.', 'patrimony:assets:[id]:DELETE');
   }
 }

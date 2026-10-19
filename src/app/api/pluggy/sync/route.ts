@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, ensureDbInitialized } from '@/db';
-import { accounts, transactions, categories, syncLocks, syncLogs } from '@/db/schema';
+import { accounts, transactions, categories, syncLocks, syncLogs, planningPreferences } from '@/db/schema';
 import { getPluggyAccounts, fetchAllPluggyTransactions, PluggyTransactionResult } from '@/lib/pluggy';
 import {
   normalizeTransactionValues,
@@ -354,6 +354,28 @@ export async function POST(request: Request) {
       durationMs,
     });
 
+    try {
+      const prefs = await db
+        .select()
+        .from(planningPreferences)
+        .where(eq(planningPreferences.id, 'default'));
+      const intervalMin = prefs[0]?.syncIntervalMinutes ?? 0;
+      const nextScheduledAt =
+        intervalMin > 0 ? new Date(Date.now() + intervalMin * 60 * 1000).toISOString() : null;
+      if (prefs.length > 0) {
+        await db
+          .update(planningPreferences)
+          .set({
+            lastSyncAt: completedAt,
+            nextScheduledSyncAt: nextScheduledAt,
+            updatedAt: completedAt,
+          })
+          .where(eq(planningPreferences.id, 'default'));
+      }
+    } catch (prefErr) {
+      console.warn('Could not update sync timestamps in planningPreferences:', prefErr);
+    }
+
     return NextResponse.json({
       success: true,
       status: syncStatus,
@@ -393,7 +415,10 @@ export async function POST(request: Request) {
       console.warn('Could not write failed sync log:', logErr);
     }
 
-    return NextResponse.json({ error: safeErrorMsg }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Erro ao sincronizar conexões do Open Finance (Pluggy).' },
+      { status: 500 }
+    );
   } finally {
     // 7. Always Release Distributed Lock
     if (activeLockKey) {

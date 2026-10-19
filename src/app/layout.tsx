@@ -16,8 +16,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "FinAI • Terminal Financeiro Institucional",
-  description: "Plataforma editorial de inteligência patrimonial, Open Finance e IA com consumo ultra-otimizado de tokens.",
+  title: "FinAI | Finanças e patrimônio",
+  description: "Acompanhe contas, movimentações, orçamento e patrimônio em um só lugar.",
 };
 
 export default function RootLayout({

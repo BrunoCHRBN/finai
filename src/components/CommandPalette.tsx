@@ -12,7 +12,8 @@ import {
   RefreshCw,
   X,
   ArrowRight,
-  Building2
+  Building2,
+  TrendingUp,
 } from 'lucide-react';
 
 interface CommandPaletteProps {
@@ -141,6 +142,16 @@ export function CommandPalette({
       run: () => {
         onClose();
         onSelectTab('copilot');
+      },
+    },
+    {
+      id: 'tab-market',
+      title: 'Ir para Inteligência de Mercado & Criptomoedas',
+      category: 'Navegação',
+      icon: TrendingUp,
+      run: () => {
+        onClose();
+        onSelectTab('market');
       },
     },
   ];
