@@ -122,11 +122,11 @@ export function PluggyConnectModal({ isOpen, onClose, onSuccessSync }: PluggyCon
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#242823]/40 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#242823]/40 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto"
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-2xl rounded-xl border border-[#E7E1D7] bg-[#FFFFFF] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        className="w-full max-w-2xl my-auto rounded-xl border border-[#E7E1D7] bg-[#FFFFFF] shadow-2xl overflow-hidden flex flex-col max-h-[92dvh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -153,7 +153,7 @@ export function PluggyConnectModal({ isOpen, onClose, onSuccessSync }: PluggyCon
         </div>
 
         {/* Mode Selector Tabs */}
-        <div className="flex border-b border-[#E7E1D7] bg-[#FAF8F5] px-4 pt-2 gap-2">
+        <div className="flex border-b border-[#E7E1D7] bg-[#FAF8F5] px-4 pt-2 gap-2 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveMode('meupluggy')}
             className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-t-lg transition-all border-b-2 cursor-pointer ${

@@ -149,13 +149,17 @@ export function WatchlistCard({
             if (isCrypto && item.cryptoDualQuote) {
               currentPrice = item.cryptoDualQuote.priceUsdt;
               change24hPct = item.cryptoDualQuote.change24hPct;
-              secondaryPrice = `≈ ${formatBRL(item.cryptoDualQuote.priceBrl)}`;
+              secondaryPrice = item.cryptoDualQuote.priceBrl != null
+                ? `≈ ${formatBRL(item.cryptoDualQuote.priceBrl)}`
+                : null;
             } else if (item.latestQuote) {
               currentPrice = item.latestQuote.price;
               change24hPct = item.latestQuote.change24hPct;
             }
 
-            const isPos = (change24hPct ?? 0) >= 0;
+            const finalChangePct = typeof change24hPct === 'number' && Number.isFinite(change24hPct) ? change24hPct : null;
+            const isPos = finalChangePct !== null && finalChangePct > 0;
+            const isNeg = finalChangePct !== null && finalChangePct < 0;
 
             // Target calculations
             const hasLowTarget = item.targetPriceAlertLow !== null && item.targetPriceAlertLow !== undefined;
@@ -246,22 +250,24 @@ export function WatchlistCard({
                         {secondaryPrice}
                       </div>
                     )}
-                    {change24hPct !== null && (
+                    {finalChangePct !== null ? (
                       <div
                         className={`text-[11px] font-mono flex items-center justify-end gap-0.5 ${
-                          isPos ? 'text-emerald-700' : 'text-red-700'
+                          isPos ? 'text-emerald-700' : isNeg ? 'text-red-700' : 'text-[#777A72]'
                         }`}
                       >
                         {isPos ? (
                           <TrendingUp className="w-3 h-3" />
-                        ) : (
+                        ) : isNeg ? (
                           <TrendingDown className="w-3 h-3" />
-                        )}
+                        ) : null}
                         <span>
                           {isPos ? '+' : ''}
-                          {change24hPct.toFixed(2).replace('.', ',')}%
+                          {finalChangePct.toFixed(2).replace('.', ',')}%
                         </span>
                       </div>
+                    ) : (
+                      <div className="text-[11px] font-mono text-[#777A72] text-right">--</div>
                     )}
                   </div>
 

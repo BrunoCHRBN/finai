@@ -29,6 +29,8 @@ import type { MarketAsset, CryptoDualQuote, HistoricalCandle } from '@/lib/marke
 interface CryptoMarketSectionProps {
   watchlistAssetIds?: Set<string>;
   onToggleWatchlist?: (assetId: string) => Promise<void>;
+  selectedSymbol?: string | null;
+  onSelectSymbol?: (symbol: string) => void;
   onSelectAsset?: (symbol: string) => void;
 }
 
@@ -112,7 +114,7 @@ function formatBRL(value?: number | null): string {
 }
 
 function formatPercent(value?: number | null): string {
-  if (value === undefined || value === null || !Number.isFinite(value)) return '0,00%';
+  if (value === undefined || value === null || !Number.isFinite(value)) return '--';
   const prefix = value > 0 ? '+' : '';
   return `${prefix}${value.toFixed(2).replace('.', ',')}%`;
 }
@@ -128,9 +130,12 @@ function formatCompactVolume(val?: number | null): string {
 export function CryptoMarketSection({
   watchlistAssetIds = new Set(),
   onToggleWatchlist,
+  selectedSymbol: propSelectedSymbol,
+  onSelectSymbol,
+  onSelectAsset,
 }: CryptoMarketSectionProps) {
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'L1' | 'DEFI_INFRA' | 'MEME_PAYMENT'>('ALL');
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSDT');
+  const [selectedSymbol, setSelectedSymbol] = useState<string>(propSelectedSymbol || 'BTCUSDT');
   const [selectedRange, setSelectedRange] = useState<'1d' | '7d' | '30d' | '90d' | '1y'>('30d');
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -146,23 +151,44 @@ export function CryptoMarketSection({
 
   const [listQuotes, setListQuotes] = useState<Record<string, CryptoDualQuote>>({});
   const [isLoadingList, setIsLoadingList] = useState(false);
-  const [usdtBrlRate, setUsdtBrlRate] = useState<number>(5.65);
+  const [usdtBrlRate, setUsdtBrlRate] = useState<number | null>(null);
 
-  // 1. Fetch detailed quote + historical candles for the selected crypto asset
-  const fetchSelectedCryptoDetail = useCallback(async (symbol: string, range: string) => {
+  const requestSeqRef = React.useRef(0);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
+
+  // Sync external selectedSymbol prop
+  useEffect(() => {
+    if (propSelectedSymbol && propSelectedSymbol !== selectedSymbol) {
+      setSelectedSymbol(propSelectedSymbol);
+    }
+  }, [propSelectedSymbol]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 1. Fetch detailed quote + historical candles for the selected crypto asset with race protection
+  const fetchSelectedCryptoDetail = useCallback(async (symbol: string, range: string, refresh = false) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const currentSeq = ++requestSeqRef.current;
+
     setIsLoadingQuote(true);
     setQuoteError(null);
     try {
-      const interval = range === '1d' ? '1h' : range === '7d' ? '4h' : range === '1y' ? '1w' : '1d';
-      const limit = range === '1d' ? 24 : range === '7d' ? 42 : range === '30d' ? 30 : 90;
+      // 1y uses 1d interval with 365 candles for authentic annual view
+      const interval = range === '1d' ? '1h' : range === '7d' ? '4h' : '1d';
+      const limit = range === '1d' ? 24 : range === '7d' ? 42 : range === '30d' ? 30 : range === '90d' ? 90 : 365;
 
       const res = await fetch(
-        `/api/market/crypto/quote?symbol=${encodeURIComponent(symbol)}&candles=true&interval=${interval}&limit=${limit}`
+        `/api/market/crypto/quote?symbol=${encodeURIComponent(symbol)}&candles=true&interval=${interval}&limit=${limit}${refresh ? '&refresh=true' : ''}`,
+        { signal: controller.signal }
       );
       if (!res.ok) {
         throw new Error(`Falha ao obter cotação de ${symbol} (${res.status})`);
       }
       const data = await res.json();
+      if (currentSeq !== requestSeqRef.current) return;
+
       const quotes: CryptoDualQuote[] = data.quotes || [];
       const quote = quotes.find((q) => q.symbol === symbol) || quotes[0] || null;
       const assets: MarketAsset[] = data.assets || [];
@@ -178,20 +204,22 @@ export function CryptoMarketSection({
 
       setActiveAsset(asset);
       setActiveQuote(quote);
-      if (data.usdtBrlRate) {
-        setUsdtBrlRate(data.usdtBrlRate);
-      }
+      setUsdtBrlRate(data.usdtBrlRate ?? null);
+
       if (data.candlesBySymbol && data.candlesBySymbol[symbol]) {
         setCandles(data.candlesBySymbol[symbol]);
       } else {
         setCandles([]);
       }
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       console.error('Error fetching crypto quote:', err);
       const msg = err instanceof Error ? err.message : 'Erro ao carregar dados do ativo.';
       setQuoteError(msg);
     } finally {
-      setIsLoadingQuote(false);
+      if (currentSeq === requestSeqRef.current) {
+        setIsLoadingQuote(false);
+      }
     }
   }, []);
 
@@ -259,11 +287,15 @@ export function CryptoMarketSection({
 
   const handleSelectSearchedAsset = (asset: MarketAsset) => {
     setSelectedSymbol(asset.symbol);
+    if (onSelectSymbol) onSelectSymbol(asset.symbol);
+    if (onSelectAsset) onSelectAsset(asset.symbol);
     setSearchQuery('');
     setSearchResults([]);
   };
 
-  const isPositive = (activeQuote?.change24hPct ?? 0) >= 0;
+  const hasValidChange = typeof activeQuote?.change24hPct === 'number' && Number.isFinite(activeQuote.change24hPct);
+  const isPositive = typeof activeQuote?.change24hPct === 'number' && activeQuote.change24hPct > 0;
+  const isNegative = typeof activeQuote?.change24hPct === 'number' && activeQuote.change24hPct < 0;
   const isWatchlisted = activeAsset ? watchlistAssetIds.has(activeAsset.id) : false;
 
   // Chart data formatting
@@ -278,7 +310,8 @@ export function CryptoMarketSection({
       label = date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
     }
     const usdtPrice = candle.close;
-    const brlPrice = usdtPrice * (activeQuote?.usdtBrlRate || usdtBrlRate);
+    const rate = activeQuote?.usdtBrlRate ?? usdtBrlRate;
+    const brlPrice = rate !== null && Number.isFinite(rate) ? usdtPrice * rate : null;
     return {
       date: label,
       timestamp: candle.timestamp,
@@ -319,7 +352,7 @@ export function CryptoMarketSection({
                 Câmbio de Paridade
               </div>
               <div className="text-[13px] font-mono font-semibold text-[#242823]">
-                1 USDT = {formatBRL(usdtBrlRate)}
+                {usdtBrlRate !== null ? `1 USDT = ${formatBRL(usdtBrlRate)}` : 'Paridade indisponível'}
               </div>
             </div>
           </div>
@@ -457,7 +490,7 @@ export function CryptoMarketSection({
                     Paridade em Reais
                   </div>
                   <div className="font-mono text-lg font-semibold text-[#253A32]">
-                    ≈ {formatBRL(activeQuote?.priceBrl)}
+                    {activeQuote?.priceBrl != null ? `≈ ${formatBRL(activeQuote.priceBrl)}` : 'Paridade indisponível'}
                   </div>
                 </div>
 
@@ -468,34 +501,51 @@ export function CryptoMarketSection({
                   </div>
                   <div
                     className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[13px] font-mono font-medium ${
-                      isPositive
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-red-50 text-red-700 border border-red-200'
+                      hasValidChange
+                        ? isPositive
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : isNegative
+                          ? 'bg-red-50 text-red-700 border border-red-200'
+                          : 'bg-stone-50 text-stone-600 border border-stone-200'
+                        : 'bg-stone-50 text-stone-600 border border-stone-200'
                     }`}
                   >
-                    {isPositive ? (
-                      <ArrowUpRight className="w-3.5 h-3.5" />
-                    ) : (
-                      <ArrowDownRight className="w-3.5 h-3.5" />
-                    )}
+                    {hasValidChange ? (
+                      isPositive ? (
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                      ) : isNegative ? (
+                        <ArrowDownRight className="w-3.5 h-3.5" />
+                      ) : null
+                    ) : null}
                     <span>{formatPercent(activeQuote?.change24hPct)}</span>
                   </div>
                 </div>
 
-                {/* Watchlist Star Toggle */}
-                {onToggleWatchlist && activeAsset && (
+                {/* Action Buttons: Refresh & Watchlist */}
+                <div className="flex items-center gap-1.5 self-end">
                   <button
-                    onClick={() => onToggleWatchlist(activeAsset.id)}
-                    className={`p-2.5 rounded-lg border transition-colors self-end ${
-                      isWatchlisted
-                        ? 'bg-amber-50 text-amber-600 border-amber-300 hover:bg-amber-100'
-                        : 'bg-white text-[#777A72] border-[#E7E1D7] hover:bg-[#F6F3ED] hover:text-[#242823]'
-                    }`}
-                    title={isWatchlisted ? 'Remover da lista de acompanhamento' : 'Adicionar à lista'}
+                    onClick={() => fetchSelectedCryptoDetail(selectedSymbol, selectedRange, true)}
+                    disabled={isLoadingQuote}
+                    className="p-2.5 rounded-lg border border-[#E7E1D7] bg-white text-[#777A72] hover:bg-[#F6F3ED] hover:text-[#242823] transition-colors"
+                    title="Atualizar cotação agora"
                   >
-                    <Star className={`w-5 h-5 ${isWatchlisted ? 'fill-amber-400' : ''}`} />
+                    <RefreshCw className={`w-5 h-5 ${isLoadingQuote ? 'animate-spin' : ''}`} />
                   </button>
-                )}
+
+                  {onToggleWatchlist && activeAsset && (
+                    <button
+                      onClick={() => onToggleWatchlist(activeAsset.id)}
+                      className={`p-2.5 rounded-lg border transition-colors ${
+                        isWatchlisted
+                          ? 'bg-amber-50 text-amber-600 border-amber-300 hover:bg-amber-100'
+                          : 'bg-white text-[#777A72] border-[#E7E1D7] hover:bg-[#F6F3ED] hover:text-[#242823]'
+                      }`}
+                      title={isWatchlisted ? 'Remover da lista de acompanhamento' : 'Adicionar à lista'}
+                    >
+                      <Star className={`w-5 h-5 ${isWatchlisted ? 'fill-amber-400' : ''}`} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -607,7 +657,9 @@ export function CryptoMarketSection({
                   {formatUSDT(activeQuote?.dayHighUsdt)}
                 </div>
                 <div className="text-[11px] font-mono text-[#777A72]">
-                  ≈ {formatBRL((activeQuote?.dayHighUsdt || 0) * (activeQuote?.usdtBrlRate || usdtBrlRate))}
+                  {activeQuote?.dayHighUsdt != null && (activeQuote?.usdtBrlRate ?? usdtBrlRate) != null
+                    ? `≈ ${formatBRL(activeQuote.dayHighUsdt * (activeQuote?.usdtBrlRate ?? usdtBrlRate)!)}`
+                    : 'Paridade indisponível'}
                 </div>
               </div>
 
@@ -617,7 +669,9 @@ export function CryptoMarketSection({
                   {formatUSDT(activeQuote?.dayLowUsdt)}
                 </div>
                 <div className="text-[11px] font-mono text-[#777A72]">
-                  ≈ {formatBRL((activeQuote?.dayLowUsdt || 0) * (activeQuote?.usdtBrlRate || usdtBrlRate))}
+                  {activeQuote?.dayLowUsdt != null && (activeQuote?.usdtBrlRate ?? usdtBrlRate) != null
+                    ? `≈ ${formatBRL(activeQuote.dayLowUsdt * (activeQuote?.usdtBrlRate ?? usdtBrlRate)!)}`
+                    : 'Paridade indisponível'}
                 </div>
               </div>
 
@@ -634,7 +688,9 @@ export function CryptoMarketSection({
               <div className="p-3 bg-[#F6F3ED] rounded-lg border border-[#E7E1D7]">
                 <div className="text-[10px] font-mono uppercase text-[#777A72]">Paridade USDT/BRL</div>
                 <div className="font-mono text-[14px] font-semibold text-[#242823]">
-                  {formatBRL(activeQuote?.usdtBrlRate || usdtBrlRate)}
+                  {(activeQuote?.usdtBrlRate ?? usdtBrlRate) != null
+                    ? formatBRL(activeQuote?.usdtBrlRate ?? usdtBrlRate)
+                    : 'Indisponível'}
                 </div>
                 <div className="text-[11px] font-sans text-[#777A72]">
                   Taxa spot de conversão
@@ -683,15 +739,20 @@ export function CryptoMarketSection({
               {CRYPTO_CATEGORIES[selectedCategory].map((item) => {
                 const quote = listQuotes[item.symbol];
                 const isSelected = selectedSymbol === item.symbol;
-                const change = quote?.change24hPct ?? 0;
-                const pos = change >= 0;
+                const hasItemChange = typeof quote?.change24hPct === 'number' && Number.isFinite(quote.change24hPct);
+                const itemPos = typeof quote?.change24hPct === 'number' && quote.change24hPct > 0;
+                const itemNeg = typeof quote?.change24hPct === 'number' && quote.change24hPct < 0;
                 const assetId = `CRYPTO:${item.symbol}`;
                 const isItemWatchlisted = watchlistAssetIds.has(assetId);
 
                 return (
                   <tr
                     key={item.symbol}
-                    onClick={() => setSelectedSymbol(item.symbol)}
+                    onClick={() => {
+                      setSelectedSymbol(item.symbol);
+                      if (onSelectSymbol) onSelectSymbol(item.symbol);
+                      if (onSelectAsset) onSelectAsset(item.symbol);
+                    }}
                     className={`cursor-pointer transition-colors ${
                       isSelected
                         ? 'bg-[#253A32]/5 font-medium'
@@ -713,17 +774,17 @@ export function CryptoMarketSection({
                       {quote ? formatUSDT(quote.priceUsdt) : '--'}
                     </td>
                     <td className="py-3 px-4 text-right font-mono text-[#253A32]">
-                      {quote ? `≈ ${formatBRL(quote.priceBrl)}` : '--'}
+                      {quote && quote.priceBrl != null ? `≈ ${formatBRL(quote.priceBrl)}` : '--'}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {quote ? (
+                      {quote && typeof quote.change24hPct === 'number' && Number.isFinite(quote.change24hPct) ? (
                         <span
                           className={`inline-flex items-center gap-0.5 font-mono text-[12px] ${
-                            pos ? 'text-emerald-700' : 'text-red-700'
+                            quote.change24hPct > 0 ? 'text-emerald-700' : quote.change24hPct < 0 ? 'text-red-700' : 'text-[#777A72]'
                           }`}
                         >
-                          {pos ? '+' : ''}
-                          {change.toFixed(2).replace('.', ',')}%
+                          {quote.change24hPct > 0 ? '+' : ''}
+                          {quote.change24hPct.toFixed(2).replace('.', ',')}%
                         </span>
                       ) : (
                         '--'

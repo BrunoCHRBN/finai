@@ -103,8 +103,8 @@ export function NewPatrimonialItemModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs font-sans">
-      <div className="bg-[#FFFFFF] border border-[#E7E1D7] rounded-lg shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-xs font-sans overflow-y-auto">
+      <div className="bg-[#FFFFFF] border border-[#E7E1D7] rounded-lg shadow-xl w-full max-w-lg overflow-hidden flex flex-col my-auto max-h-[92dvh]">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-[#E7E1D7] flex items-center justify-between bg-[#FDFCFB]">
           <div>
@@ -254,7 +254,7 @@ export function NewPatrimonialItemModal({
 
           {/* Liability Specific: Creditor & Installment */}
           {itemType === 'LIABILITY' && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-[#5F635C] mb-1">Instituição Credora</label>
                 <input

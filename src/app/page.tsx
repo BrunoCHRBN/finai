@@ -27,6 +27,7 @@ export default function Home() {
   const [categories, setCategories] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [goals, setGoals] = useState<any[]>([]);
+  const [cashFlowProjection, setCashFlowProjection] = useState<any | null>(null);
   const [latestDiagnosis, setLatestDiagnosis] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -34,7 +35,8 @@ export default function Home() {
   const [isSyncingPluggy, setIsSyncingPluggy] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
-  // Modals state
+  // Modals and drawer state
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isNewTxModalOpen, setIsNewTxModalOpen] = useState(false);
   const [isPluggyModalOpen, setIsPluggyModalOpen] = useState(false);
@@ -52,6 +54,7 @@ export default function Home() {
       setCategories(data.categories || []);
       setTransactions(data.transactions || []);
       setGoals(data.goals || []);
+      setCashFlowProjection(data.cashFlowProjection || null);
 
       if (data.latestDiagnosis) {
         setLatestDiagnosis({
@@ -186,17 +189,19 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-[#F6F3ED] text-[#242823] overflow-hidden font-sans">
-      {/* 1. Desktop Persistent Sidebar */}
+      {/* 1. Responsive Sidebar (Persistent on Desktop, Drawer on Mobile/Tablet) */}
       <Sidebar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         maturityLevel={metrics?.maturityLevel || 2}
         tokenCount={latestDiagnosis?.tokenCount || 0}
+        isOpen={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
       />
 
-      {/* 2. Main Desktop Content Area */}
+      {/* 2. Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header */}
+        {/* Top Header with Hamburger for Mobile */}
         <Header
           metrics={metrics}
           currentMonth={currentMonth}
@@ -206,18 +211,23 @@ export default function Home() {
           onRunAIDiagnosis={handleRunAIDiagnosis}
           onOpenNewTxModal={() => setIsNewTxModalOpen(true)}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onToggleMobileMenu={() => setIsMobileSidebarOpen((prev) => !prev)}
         />
 
-        {/* Scrollable View Content */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#F6F3ED]">
+        {/* Scrollable View Content with Fluid Responsive Padding */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-5 md:p-6 lg:p-8 bg-[#F6F3ED]">
           <div className="w-full max-w-[1520px] mx-auto">
             {currentTab === 'dashboard' && metrics && (
               <DashboardView
                 metrics={metrics}
                 diagnosis={latestDiagnosis}
                 goals={goals}
+                cashFlowProjection={cashFlowProjection}
+                recentTransactions={transactions.slice(0, 5)}
+                currentMonth={currentMonth}
                 onOpenNewTxModal={() => setIsNewTxModalOpen(true)}
                 onOpenAIDiagnosis={handleRunAIDiagnosis}
+                onSelectTab={setCurrentTab}
               />
             )}
 

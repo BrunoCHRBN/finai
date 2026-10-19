@@ -79,11 +79,11 @@ export function NewTransactionModal({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#242823]/40 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#242823]/40 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto"
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-md rounded-xl border border-[#E7E1D7] bg-[#FFFFFF] shadow-2xl overflow-hidden"
+        className="w-full max-w-md my-auto max-h-[92dvh] flex flex-col rounded-xl border border-[#E7E1D7] bg-[#FFFFFF] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -109,7 +109,7 @@ export function NewTransactionModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
           {/* Mode Selector: Despesa vs Receita vs Transferência */}
           <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-[#F0EDE6] border border-[#E7E1D7]">
             <button

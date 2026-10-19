@@ -1,6 +1,16 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { db, ensureDbInitialized } from '@/db';
-import { accounts, categories, budgets, transactions, goals, aiDiagnostics } from '@/db/schema';
+import { 
+  accounts, 
+  categories, 
+  budgets, 
+  transactions, 
+  goals, 
+  aiDiagnostics,
+  recurringFlows,
+  recurringOccurrences,
+  patrimonialLiabilities
+} from '@/db/schema';
 import { calculateFinancialMetrics } from '@/lib/ai/math-engine';
 import { 
   normalizeTransactionValues, 
@@ -9,6 +19,7 @@ import {
 } from '@/lib/transactions';
 import { desc, eq } from 'drizzle-orm';
 import { handleApiError } from '@/lib/api-error';
+import { calculateCashFlowProjection, prepareCanonicalTransactions } from '@/lib/planning-engine';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,18 +27,27 @@ export async function GET(request: NextRequest) {
 
     const month = request.nextUrl.searchParams.get('month') || '2026-10';
 
-    const allAccounts = await db.select().from(accounts);
-    const allCategories = await db.select().from(categories);
-    const periodBudgets = await db.select().from(budgets).where(eq(budgets.month, month));
-    const allTransactions = await db.select().from(transactions).orderBy(desc(transactions.date));
-    const allGoals = await db.select().from(goals);
-    
-    // Get latest AI diagnostic for this month
-    const diagnosticsList = await db
-      .select()
-      .from(aiDiagnostics)
-      .orderBy(desc(aiDiagnostics.createdAt))
-      .limit(1);
+    const [
+      allAccounts,
+      allCategories,
+      periodBudgets,
+      allTransactions,
+      allGoals,
+      allRecurring,
+      allOccurrences,
+      allLiabilities,
+      diagnosticsList,
+    ] = await Promise.all([
+      db.select().from(accounts),
+      db.select().from(categories),
+      db.select().from(budgets).where(eq(budgets.month, month)),
+      db.select().from(transactions).orderBy(desc(transactions.date)),
+      db.select().from(goals),
+      db.select().from(recurringFlows),
+      db.select().from(recurringOccurrences),
+      db.select().from(patrimonialLiabilities),
+      db.select().from(aiDiagnostics).orderBy(desc(aiDiagnostics.createdAt)).limit(1),
+    ]);
 
     // 1. Normalize all transactions using canonical domain convention
     const normalizedTransactions = allTransactions.map((tx) => {
@@ -120,6 +140,19 @@ export async function GET(request: NextRequest) {
       enrichedPrevMonthTxs
     );
 
+    // 6. Compute prospective cash flow projection (30, 60, 90 days)
+    const canonicalPlanningTxs = prepareCanonicalTransactions(allTransactions, allAccounts);
+    const cashFlowProjection = calculateCashFlowProjection({
+      referenceMonth: month,
+      horizonMonths: 3,
+      accounts: allAccounts,
+      reconciledTransactions: canonicalPlanningTxs,
+      recurringFlows: allRecurring,
+      liabilities: allLiabilities,
+      goals: allGoals,
+      occurrences: allOccurrences,
+    });
+
     return NextResponse.json({
       month,
       metrics,
@@ -133,6 +166,7 @@ export async function GET(request: NextRequest) {
       })),
       goals: allGoals,
       latestDiagnosis: diagnosticsList[0] || null,
+      cashFlowProjection,
     });
   } catch (error: unknown) {
     return handleApiError(error, 'Erro ao carregar o resumo financeiro consolidado.', 'financial-summary');

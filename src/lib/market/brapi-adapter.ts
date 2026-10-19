@@ -82,6 +82,16 @@ export function getBrapiConfig(overrides?: BrapiAdapterConfig): Required<BrapiAd
   };
 }
 
+function sanitizeError(msg: string, token?: string): string {
+  let clean = msg;
+  if (token && token.length > 3) {
+    clean = clean.split(token).join('[REDACTED]');
+  }
+  clean = clean.replace(/Bearer\s+[A-Za-z0-9_\-\.]+/gi, 'Bearer [REDACTED]');
+  clean = clean.replace(/token=[A-Za-z0-9_\-\.]+/gi, 'token=[REDACTED]');
+  return clean;
+}
+
 /**
  * Executes an HTTP request through the brapi serialized mutex with retry and timeout.
  */
@@ -116,6 +126,14 @@ export async function executeBrapiRequest(
 
         clearTimeout(timer);
 
+        // Check for API deprecation headers
+        const deprecation = response.headers.get('link')?.includes('deprecation') || 
+                            response.headers.get('deprecation') || 
+                            response.headers.get('sunset');
+        if (deprecation) {
+          console.warn('[brapi-adapter] Provider returned deprecation or sunset header:', deprecation);
+        }
+
         if (response.ok) {
           return response;
         }
@@ -146,14 +164,16 @@ export async function executeBrapiRequest(
           }
         }
 
-        const errorText = await response.text().catch(() => '');
-        throw new Error(`brapi API error (${response.status}): ${errorText || response.statusText}`);
+        const rawErrorText = await response.text().catch(() => '');
+        const sanitizedErrorText = sanitizeError(rawErrorText, config.apiToken);
+        throw new Error(sanitizeError(`brapi API error (${response.status}): ${sanitizedErrorText || response.statusText}`, config.apiToken));
       } catch (err: unknown) {
         clearTimeout(timer);
         const isAbort = err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'));
-        lastError = isAbort
-          ? new Error(`brapi request timed out after ${config.timeoutMs}ms`)
-          : (err as Error);
+        const rawMessage = isAbort
+          ? `brapi request timed out after ${config.timeoutMs}ms`
+          : (err instanceof Error ? err.message : String(err));
+        lastError = new Error(sanitizeError(rawMessage, config.apiToken));
 
         if (attempt < config.maxRetries) {
           const waitMs = config.backoffBaseMs * Math.pow(2, attempt) + Math.random() * 200;
@@ -219,27 +239,28 @@ export interface BrapiRawQuoteItem {
   shortName?: string;
   longName?: string;
   currency?: string;
-  regularMarketPrice?: number;
-  regularMarketChange?: number;
-  regularMarketChangePercent?: number;
-  regularMarketDayHigh?: number;
-  regularMarketDayLow?: number;
-  regularMarketVolume?: number;
-  marketCap?: number;
-  regularMarketTime?: string | number;
+  regularMarketPrice?: number | null;
+  regularMarketChange?: number | null;
+  regularMarketChangePercent?: number | null;
+  regularMarketTime?: string | number | null;
+  regularMarketDayHigh?: number | null;
+  regularMarketDayLow?: number | null;
+  regularMarketVolume?: number | null;
+  marketCap?: number | null;
   logourl?: string;
-  dividendYield?: number;
-  lastDividend?: number;
-  priceEarnings?: number;
-  priceToBook?: number;
-  fiftyTwoWeekHigh?: number;
-  fiftyTwoWeekLow?: number;
+  dividendYield?: number | null;
+  lastDividend?: number | null;
+  priceEarnings?: number | null;
+  priceToBook?: number | null;
+  fiftyTwoWeekHigh?: number | null;
+  fiftyTwoWeekLow?: number | null;
   type?: string;
   subType?: string;
   sector?: string;
+  data?: Record<string, unknown>; // Support for Brapi v2 nested structure
   summaryProfile?: {
     sector?: string;
-    dividendYield?: number;
+    dividendYield?: number | null;
     [key: string]: unknown;
   };
   historicalDataPrice?: Array<{
@@ -309,28 +330,54 @@ export async function fetchBrapiQuotes(
   const historicalCandlesBySymbol: Record<string, HistoricalCandle[]> = {};
 
   for (const item of results) {
-    if (!item || !item.symbol) continue;
+    if (!item) continue;
 
-    const sym = String(item.symbol).toUpperCase();
+    // Support both Brapi v1 (direct properties) and v2 (data sub-object)
+    const rawData = (item.data && typeof item.data === 'object' ? item.data : item) as Record<string, unknown>;
+    const rawSym = (item.symbol || rawData.symbol) as string | undefined;
+    if (!rawSym) continue;
+
+    const sym = String(rawSym).toUpperCase();
     const assetId = `B3:${sym}`;
-    const assetType = inferBrapiAssetType(sym, item.type, item.subType);
-    const price = typeof item.regularMarketPrice === 'number' ? item.regularMarketPrice : 0;
-    const changePct = typeof item.regularMarketChangePercent === 'number' ? item.regularMarketChangePercent : 0;
-    const changeAmount = typeof item.regularMarketChange === 'number' ? item.regularMarketChange : 0;
-    const dayHigh = typeof item.regularMarketDayHigh === 'number' ? item.regularMarketDayHigh : null;
-    const dayLow = typeof item.regularMarketDayLow === 'number' ? item.regularMarketDayLow : null;
-    const volume = typeof item.regularMarketVolume === 'number' ? item.regularMarketVolume : null;
-    const marketCap = typeof item.marketCap === 'number' ? item.marketCap : null;
+    const assetType = inferBrapiAssetType(sym, item.type || (rawData.type as string), item.subType || (rawData.subType as string));
 
-    let quoteTimestamp = fetchedAt;
-    if (item.regularMarketTime) {
-      quoteTimestamp = new Date(item.regularMarketTime).toISOString();
+    const rawPrice = rawData.regularMarketPrice;
+    const price = typeof rawPrice === 'number' && Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : null;
+
+    const rawChangePct = rawData.regularMarketChangePercent;
+    const changePct = typeof rawChangePct === 'number' && Number.isFinite(rawChangePct) ? rawChangePct : null;
+
+    const rawChangeAmount = rawData.regularMarketChange;
+    const changeAmount = typeof rawChangeAmount === 'number' && Number.isFinite(rawChangeAmount) ? rawChangeAmount : null;
+
+    const rawHigh = rawData.regularMarketDayHigh;
+    const dayHigh = typeof rawHigh === 'number' && Number.isFinite(rawHigh) ? rawHigh : null;
+
+    const rawLow = rawData.regularMarketDayLow;
+    const dayLow = typeof rawLow === 'number' && Number.isFinite(rawLow) ? rawLow : null;
+
+    const rawVol = rawData.regularMarketVolume;
+    const volume = typeof rawVol === 'number' && Number.isFinite(rawVol) ? rawVol : null;
+
+    const rawCap = rawData.marketCap;
+    const marketCap = typeof rawCap === 'number' && Number.isFinite(rawCap) ? rawCap : null;
+
+    // Provider quote timestamp — strictly null if unverified/missing, never fabricated as current time
+    let quoteTimestamp: string | null = null;
+    const rawTime = rawData.regularMarketTime;
+    if (typeof rawTime === 'string' || typeof rawTime === 'number') {
+      const timeVal = typeof rawTime === 'number' && rawTime < 1e11 ? rawTime * 1000 : rawTime;
+      const parsed = new Date(timeVal);
+      if (!Number.isNaN(parsed.getTime())) {
+        quoteTimestamp = parsed.toISOString();
+      }
     }
 
     // Historical candles if returned
     const candles: HistoricalCandle[] = [];
-    if (Array.isArray(item.historicalDataPrice)) {
-      for (const h of item.historicalDataPrice) {
+    const histData = (rawData.historicalDataPrice || item.historicalDataPrice) as Array<{ date?: number; open?: number; high?: number; low?: number; close?: number; volume?: number }> | undefined;
+    if (Array.isArray(histData)) {
+      for (const h of histData) {
         if (!h) continue;
         const ts = typeof h.date === 'number' ? (h.date > 1e11 ? h.date : h.date * 1000) : Date.now();
         candles.push({
@@ -346,18 +393,20 @@ export async function fetchBrapiQuotes(
     }
     historicalCandlesBySymbol[sym] = candles;
 
+    const rawSummaryProfile = (rawData.summaryProfile || item.summaryProfile) as { sector?: string; dividendYield?: number } | undefined;
     const rawMetrics: MarketQuote['rawMetrics'] = {
-      dividendYield: item.dividendYield ?? item.summaryProfile?.dividendYield ?? null,
-      lastDividend: item.lastDividend ?? null,
-      priceToEarnings: item.priceEarnings ?? null,
-      priceToBook: item.priceToBook ?? null,
-      fiftyTwoWeekHigh: item.fiftyTwoWeekHigh ?? null,
-      fiftyTwoWeekLow: item.fiftyTwoWeekLow ?? null,
+      dividendYield: (rawData.dividendYield ?? rawSummaryProfile?.dividendYield ?? item.dividendYield) as number | null ?? null,
+      lastDividend: (rawData.lastDividend ?? item.lastDividend) as number | null ?? null,
+      priceToEarnings: (rawData.priceEarnings ?? item.priceEarnings) as number | null ?? null,
+      priceToBook: (rawData.priceToBook ?? item.priceToBook) as number | null ?? null,
+      fiftyTwoWeekHigh: (rawData.fiftyTwoWeekHigh ?? item.fiftyTwoWeekHigh) as number | null ?? null,
+      fiftyTwoWeekLow: (rawData.fiftyTwoWeekLow ?? item.fiftyTwoWeekLow) as number | null ?? null,
     };
 
     const quote: MarketQuote = {
       id: assetId,
       assetId,
+      symbol: sym,
       price,
       change24hPct: changePct,
       change24hAmount: changeAmount,
@@ -368,6 +417,8 @@ export async function fetchBrapiQuotes(
       quoteTimestamp,
       fetchedAt,
       isStale: false,
+      expectedDelayMinutes: 15, // Standard B3 delay on non-realtime feed
+      source: 'network',
       rawMetrics,
     };
 

@@ -30,6 +30,7 @@ import {
   searchPopularCryptoAssets,
   POPULAR_CRYPTO_SYMBOLS,
   type BinanceAdapterConfig,
+  type CryptoDualQuotesResult,
 } from './binance-adapter.ts';
 
 // Configurable TTL
@@ -44,7 +45,7 @@ interface MemoryCacheEntry<T> {
 
 const memoryQuotesCache = new Map<string, MemoryCacheEntry<MarketQuote>>();
 const memoryCryptoQuotesCache = new Map<string, MemoryCacheEntry<CryptoDualQuote>>();
-let memoryUsdtBrlRateCache: { rate: number; expiresAt: number } | null = null;
+let memoryUsdtBrlRateCache: { rate: number | null; expiresAt: number } | null = null;
 
 function getPersistentCacheTtlMs(): number {
   const envSeconds = process.env.MARKET_CACHE_TTL_SECONDS;
@@ -105,6 +106,7 @@ export async function persistQuotesCache(quotes: MarketQuote[]): Promise<void> {
   await ensureDbInitialized();
 
   for (const q of quotes) {
+    if (q.price === null) continue;
     try {
       await db
         .insert(marketQuotesCache)
@@ -112,13 +114,13 @@ export async function persistQuotesCache(quotes: MarketQuote[]): Promise<void> {
           id: q.id,
           assetId: q.assetId,
           price: q.price,
-          change24hPct: q.change24hPct,
-          change24hAmount: q.change24hAmount,
+          change24hPct: q.change24hPct ?? 0,
+          change24hAmount: q.change24hAmount ?? 0,
           dayHigh: q.dayHigh || null,
           dayLow: q.dayLow || null,
           volume24h: q.volume24h || null,
           marketCap: q.marketCap || null,
-          quoteTimestamp: q.quoteTimestamp,
+          quoteTimestamp: q.quoteTimestamp || q.fetchedAt,
           fetchedAt: q.fetchedAt,
           rawPayloadJson: q.rawMetrics ? JSON.stringify(q.rawMetrics) : null,
         })
@@ -126,13 +128,13 @@ export async function persistQuotesCache(quotes: MarketQuote[]): Promise<void> {
           target: marketQuotesCache.id,
           set: {
             price: q.price,
-            change24hPct: q.change24hPct,
-            change24hAmount: q.change24hAmount,
+            change24hPct: q.change24hPct ?? 0,
+            change24hAmount: q.change24hAmount ?? 0,
             dayHigh: q.dayHigh || null,
             dayLow: q.dayLow || null,
             volume24h: q.volume24h || null,
             marketCap: q.marketCap || null,
-            quoteTimestamp: q.quoteTimestamp,
+            quoteTimestamp: q.quoteTimestamp || q.fetchedAt,
             fetchedAt: q.fetchedAt,
             rawPayloadJson: q.rawMetrics ? JSON.stringify(q.rawMetrics) : null,
           },
@@ -204,19 +206,31 @@ export async function getB3Quotes(
         const isFresh = now - fetchedTime < persistentTtl;
 
         const rawMetrics = row.rawPayloadJson ? JSON.parse(row.rawPayloadJson) : null;
+        const price = typeof row.price === 'number' && Number.isFinite(row.price) ? row.price : null;
+        const change24hPct = typeof row.change24hPct === 'number' && Number.isFinite(row.change24hPct) ? row.change24hPct : null;
+        const change24hAmount = typeof row.change24hAmount === 'number' && Number.isFinite(row.change24hAmount) ? row.change24hAmount : null;
+        const dayHigh = typeof row.dayHigh === 'number' && Number.isFinite(row.dayHigh) ? row.dayHigh : null;
+        const dayLow = typeof row.dayLow === 'number' && Number.isFinite(row.dayLow) ? row.dayLow : null;
+        const volume24h = typeof row.volume24h === 'number' && Number.isFinite(row.volume24h) ? row.volume24h : null;
+        const marketCap = typeof row.marketCap === 'number' && Number.isFinite(row.marketCap) ? row.marketCap : null;
+
+        const sym = row.assetId.replace(/^B3:/, '');
         const quote: MarketQuote = {
           id: row.id,
           assetId: row.assetId,
-          price: row.price,
-          change24hPct: row.change24hPct,
-          change24hAmount: row.change24hAmount,
-          dayHigh: row.dayHigh,
-          dayLow: row.dayLow,
-          volume24h: row.volume24h,
-          marketCap: row.marketCap,
+          symbol: sym,
+          price,
+          change24hPct,
+          change24hAmount,
+          dayHigh,
+          dayLow,
+          volume24h,
+          marketCap,
           quoteTimestamp: row.quoteTimestamp,
           fetchedAt: row.fetchedAt,
           isStale: !isFresh,
+          expectedDelayMinutes: 15,
+          source: 'cache',
           rawMetrics,
         };
 
@@ -282,19 +296,31 @@ export async function getB3Quotes(
         .where(inArray(marketQuotesCache.id, fallbackAssetIds));
 
       for (const row of staleRows) {
+        const price = typeof row.price === 'number' && Number.isFinite(row.price) ? row.price : null;
+        const change24hPct = typeof row.change24hPct === 'number' && Number.isFinite(row.change24hPct) ? row.change24hPct : null;
+        const change24hAmount = typeof row.change24hAmount === 'number' && Number.isFinite(row.change24hAmount) ? row.change24hAmount : null;
+        const dayHigh = typeof row.dayHigh === 'number' && Number.isFinite(row.dayHigh) ? row.dayHigh : null;
+        const dayLow = typeof row.dayLow === 'number' && Number.isFinite(row.dayLow) ? row.dayLow : null;
+        const volume24h = typeof row.volume24h === 'number' && Number.isFinite(row.volume24h) ? row.volume24h : null;
+        const marketCap = typeof row.marketCap === 'number' && Number.isFinite(row.marketCap) ? row.marketCap : null;
+
+        const sym = row.assetId.replace(/^B3:/, '');
         quotesResult.push({
           id: row.id,
           assetId: row.assetId,
-          price: row.price,
-          change24hPct: row.change24hPct,
-          change24hAmount: row.change24hAmount,
-          dayHigh: row.dayHigh,
-          dayLow: row.dayLow,
-          volume24h: row.volume24h,
-          marketCap: row.marketCap,
+          symbol: sym,
+          price,
+          change24hPct,
+          change24hAmount,
+          dayHigh,
+          dayLow,
+          volume24h,
+          marketCap,
           quoteTimestamp: row.quoteTimestamp,
           fetchedAt: row.fetchedAt,
           isStale: true,
+          expectedDelayMinutes: 15,
+          source: 'cache',
           rawMetrics: row.rawPayloadJson ? JSON.parse(row.rawPayloadJson) : null,
         });
       }
@@ -332,11 +358,7 @@ export async function getCryptoQuotes(
     forceRefresh?: boolean;
     binanceConfig?: BinanceAdapterConfig;
   }
-): Promise<{
-  quotes: CryptoDualQuote[];
-  assets: MarketAsset[];
-  usdtBrlRate: number;
-}> {
+): Promise<CryptoDualQuotesResult> {
   await ensureDbInitialized();
   const cleaned = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
   const now = Date.now();
@@ -413,12 +435,16 @@ export async function getCryptoQuotes(
       .from(marketQuotesCache)
       .where(inArray(marketQuotesCache.id, assetIds));
 
-    const fallbackRate = memoryUsdtBrlRateCache?.rate || 5.60;
+    const fallbackRate = memoryUsdtBrlRateCache?.rate ?? null;
     const fallbackQuotes: CryptoDualQuote[] = rows.map((r) => {
       const sym = r.id.replace('CRYPTO:', '');
       const baseAsset = sym.endsWith('USDT') ? sym.slice(0, -4) : sym;
-      const priceUsdt = r.price;
-      const priceBrl = Number((priceUsdt * fallbackRate).toFixed(2));
+      const priceUsdt = typeof r.price === 'number' && Number.isFinite(r.price) ? r.price : null;
+      const priceBrl = fallbackRate !== null && priceUsdt !== null ? Number((priceUsdt * fallbackRate).toFixed(2)) : null;
+
+      const change24hPct = typeof r.change24hPct === 'number' && Number.isFinite(r.change24hPct) ? r.change24hPct : null;
+      const change24hAmountUsdt = typeof r.change24hAmount === 'number' && Number.isFinite(r.change24hAmount) ? r.change24hAmount : null;
+      const change24hAmountBrl = fallbackRate !== null && change24hAmountUsdt !== null ? Number((change24hAmountUsdt * fallbackRate).toFixed(2)) : null;
 
       return {
         assetId: r.id,
@@ -429,15 +455,16 @@ export async function getCryptoQuotes(
         priceUsdt,
         priceBrl,
         usdtBrlRate: fallbackRate,
-        change24hPct: r.change24hPct,
-        change24hAmountUsdt: r.change24hAmount,
-        change24hAmountBrl: Number((r.change24hAmount * fallbackRate).toFixed(2)),
-        dayHighUsdt: r.dayHigh,
-        dayLowUsdt: r.dayLow,
-        volume24hUsdt: r.volume24h,
+        change24hPct,
+        change24hAmountUsdt,
+        change24hAmountBrl,
+        dayHighUsdt: typeof r.dayHigh === 'number' && Number.isFinite(r.dayHigh) ? r.dayHigh : null,
+        dayLowUsdt: typeof r.dayLow === 'number' && Number.isFinite(r.dayLow) ? r.dayLow : null,
+        volume24hUsdt: typeof r.volume24h === 'number' && Number.isFinite(r.volume24h) ? r.volume24h : null,
         quoteTimestamp: r.quoteTimestamp,
         fetchedAt: r.fetchedAt,
         isStale: true,
+        source: 'cache',
       };
     });
 
@@ -468,20 +495,22 @@ export function searchCrypto(query?: string): MarketAsset[] {
 /**
  * Aggregates a Market Overview summary for top ticker tape and macro comparison.
  */
-export async function getMarketOverview(): Promise<MarketOverviewSummary> {
+export async function getMarketOverview(options?: { forceRefresh?: boolean }): Promise<MarketOverviewSummary> {
   const indexTickers = ['^BVSP', 'IFIX', 'PETR4', 'VALE3', 'ITUB4', 'BOVA11'];
   const [b3Result, cryptoResult] = await Promise.all([
-    getB3Quotes(indexTickers),
-    getCryptoQuotes(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']),
+    getB3Quotes(indexTickers, { forceRefresh: options?.forceRefresh }),
+    getCryptoQuotes(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'], { forceRefresh: options?.forceRefresh }),
   ]);
 
   const indices = b3Result.quotes.filter((q) => q.assetId.includes('^BVSP') || q.assetId.includes('IFIX'));
   const stocks = b3Result.quotes.filter((q) => !indices.some((i) => i.id === q.id));
 
   // Sort gainers / losers
-  const sorted = [...stocks].sort((a, b) => b.change24hPct - a.change24hPct);
-  const topGainersB3 = sorted.filter((s) => s.change24hPct > 0).slice(0, 3);
-  const topLosersB3 = [...sorted].reverse().filter((s) => s.change24hPct < 0).slice(0, 3);
+  const sorted = [...stocks].sort((a, b) => (b.change24hPct ?? 0) - (a.change24hPct ?? 0));
+  const topGainersB3 = sorted.filter((s) => s.change24hPct !== null && s.change24hPct > 0).slice(0, 3);
+  const topLosersB3 = [...sorted].reverse().filter((s) => s.change24hPct !== null && s.change24hPct < 0).slice(0, 3);
+
+  const assembledAt = new Date().toISOString();
 
   return {
     indices: b3Result.quotes,
@@ -489,14 +518,15 @@ export async function getMarketOverview(): Promise<MarketOverviewSummary> {
     topGainersB3,
     topLosersB3,
     usdtBrlRate: cryptoResult.usdtBrlRate,
-    updatedAt: new Date().toISOString(),
+    assembledAt,
+    updatedAt: assembledAt,
   };
 }
 
 /**
  * Retrieves the user's Watchlist items enriched with their assets and quotes.
  */
-export async function getWatchlist(): Promise<MarketWatchlistItem[]> {
+export async function getWatchlist(options?: { forceRefresh?: boolean }): Promise<MarketWatchlistItem[]> {
   await ensureDbInitialized();
 
   const watchlistRows = await db
@@ -530,8 +560,8 @@ export async function getWatchlist(): Promise<MarketWatchlistItem[]> {
   }
 
   const [b3QuotesRes, cryptoQuotesRes] = await Promise.all([
-    b3Symbols.length > 0 ? getB3Quotes(b3Symbols) : Promise.resolve({ quotes: [] }),
-    cryptoSymbols.length > 0 ? getCryptoQuotes(cryptoSymbols) : Promise.resolve({ quotes: [] }),
+    b3Symbols.length > 0 ? getB3Quotes(b3Symbols, { forceRefresh: options?.forceRefresh }) : Promise.resolve({ quotes: [] }),
+    cryptoSymbols.length > 0 ? getCryptoQuotes(cryptoSymbols, { forceRefresh: options?.forceRefresh }) : Promise.resolve({ quotes: [], usdtBrlRate: null }),
   ]);
 
   const b3QuotesMap = new Map<string, MarketQuote>();

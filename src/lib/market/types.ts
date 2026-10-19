@@ -35,16 +35,20 @@ export interface MarketAsset {
 export interface MarketQuote {
   id: string; // matches assetId
   assetId: string;
-  price: number;
-  change24hPct: number;
-  change24hAmount: number;
+  symbol?: string; // e.g. "PETR4"
+  price: number | null;
+  change24hPct: number | null;
+  change24hAmount: number | null;
   dayHigh?: number | null;
   dayLow?: number | null;
   volume24h?: number | null;
   marketCap?: number | null;
-  quoteTimestamp: string; // Provider quote time
-  fetchedAt: string; // FinAI internal cache time
+  quoteTimestamp: string | null; // Provider quote time (null if unavailable/unverified)
+  fetchedAt: string; // FinAI internal fetch time
+  cachedAt?: string | null; // When saved into cache
   isStale?: boolean;
+  expectedDelayMinutes?: number | null; // e.g. 15 for B3 delayed feed
+  source?: 'network' | 'cache';
   rawMetrics?: {
     dividendYield?: number | null;
     lastDividend?: number | null;
@@ -62,18 +66,20 @@ export interface CryptoDualQuote {
   baseAsset: string; // "BTC"
   quoteAsset: 'USDT';
   name: string;
-  priceUsdt: number;
-  priceBrl: number;
-  usdtBrlRate: number;
-  change24hPct: number;
-  change24hAmountUsdt: number;
-  change24hAmountBrl: number;
+  priceUsdt: number | null;
+  priceBrl: number | null; // Strictly null if usdtBrlRate is unavailable
+  usdtBrlRate: number | null; // Strictly null if unavailable
+  change24hPct: number | null;
+  change24hAmountUsdt: number | null;
+  change24hAmountBrl: number | null;
   dayHighUsdt?: number | null;
   dayLowUsdt?: number | null;
   volume24hUsdt?: number | null;
-  quoteTimestamp: string;
-  fetchedAt: string;
+  quoteTimestamp: string | null; // Provider quote time
+  fetchedAt: string; // FinAI internal fetch time
+  cachedAt?: string | null;
   isStale?: boolean;
+  source?: 'network' | 'cache';
 }
 
 export interface HistoricalCandle {
@@ -113,6 +119,9 @@ export interface MarketOverviewSummary {
   cryptoHighlights: CryptoDualQuote[];
   topGainersB3: MarketQuote[];
   topLosersB3: MarketQuote[];
-  usdtBrlRate: number;
-  updatedAt: string;
+  usdtBrlRate: number | null; // Null if unavailable
+  usdtBrlRateUpdatedAt?: string | null;
+  assembledAt: string; // Time when FinAI assembled the overview
+  updatedAt: string; // Backward compatibility alias
+  source?: 'network' | 'cache' | 'partial';
 }

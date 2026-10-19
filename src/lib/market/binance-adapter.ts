@@ -130,27 +130,32 @@ export async function executeBinanceRequest(
 
 /**
  * Fetches the current USDT to BRL conversion rate from Binance Spot (symbol: USDTBRL).
+ * Returns null if the rate is unavailable, rejecting artificial constant fallbacks.
  */
-export async function fetchUsdtBrlRate(customConfig?: BinanceAdapterConfig): Promise<number> {
+export async function fetchUsdtBrlRate(customConfig?: BinanceAdapterConfig): Promise<number | null> {
   const config = getBinanceConfig(customConfig);
   try {
     const res = await executeBinanceRequest('/ticker/price?symbol=USDTBRL', config);
     const data = await res.json();
     const rate = Number(data?.price);
     if (!Number.isFinite(rate) || rate <= 0) {
-      throw new Error(`Invalid USDTBRL price received: ${data?.price}`);
+      return null;
     }
     return rate;
-  } catch (error) {
+  } catch {
     // If primary endpoint failed and we used vision, attempt fallback domain once
     if (config.baseUrl.includes('binance.vision')) {
-      const fallbackConfig = { ...config, baseUrl: BINANCE_FALLBACK_BASE_URL };
-      const res = await executeBinanceRequest('/ticker/price?symbol=USDTBRL', fallbackConfig);
-      const data = await res.json();
-      const rate = Number(data?.price);
-      if (Number.isFinite(rate) && rate > 0) return rate;
+      try {
+        const fallbackConfig = { ...config, baseUrl: BINANCE_FALLBACK_BASE_URL };
+        const res = await executeBinanceRequest('/ticker/price?symbol=USDTBRL', fallbackConfig);
+        const data = await res.json();
+        const rate = Number(data?.price);
+        if (Number.isFinite(rate) && rate > 0) return rate;
+      } catch {
+        return null;
+      }
     }
-    throw error;
+    return null;
   }
 }
 
@@ -183,11 +188,12 @@ export async function fetchBinance24hTickers(
 export interface CryptoDualQuotesResult {
   quotes: CryptoDualQuote[];
   assets: MarketAsset[];
-  usdtBrlRate: number;
+  usdtBrlRate: number | null;
 }
 
 /**
  * High-level method: Fetches dual quotes (USDT primary + BRL converted) for requested crypto symbols.
+ * BRL parity is strictly calculated only when a valid, finite usdtBrlRate is available.
  */
 export async function fetchCryptoDualQuotes(
   symbols: string[] = POPULAR_CRYPTO_SYMBOLS.map((p) => p.symbol),
@@ -195,11 +201,14 @@ export async function fetchCryptoDualQuotes(
 ): Promise<CryptoDualQuotesResult> {
   const config = getBinanceConfig(customConfig);
 
-  // 1. Fetch USDTBRL rate and 24h tickers concurrently
-  const [usdtBrlRate, rawTickers] = await Promise.all([
+  // 1. Fetch USDTBRL rate and 24h tickers in parallel without hardcoded rate fallback
+  const [usdtBrlRateResult, rawTickersResult] = await Promise.allSettled([
     fetchUsdtBrlRate(config),
     fetchBinance24hTickers(symbols, config),
   ]);
+
+  const usdtBrlRate = usdtBrlRateResult.status === 'fulfilled' ? usdtBrlRateResult.value : null;
+  const rawTickers = rawTickersResult.status === 'fulfilled' ? rawTickersResult.value : [];
 
   const fetchedAt = new Date().toISOString();
   const nameMap = new Map<string, string>(POPULAR_CRYPTO_SYMBOLS.map((p) => [p.symbol, p.name]));
@@ -214,18 +223,38 @@ export async function fetchCryptoDualQuotes(
     const baseAsset = sym.endsWith('USDT') ? sym.slice(0, -4) : sym;
     const name = nameMap.get(sym) || `${baseAsset} Token`;
 
-    const priceUsdt = Number(ticker.lastPrice) || 0;
-    const priceBrl = Number((priceUsdt * usdtBrlRate).toFixed(2));
-    const changePct = Number(ticker.priceChangePercent) || 0;
-    const changeAmountUsdt = Number(ticker.priceChange) || 0;
-    const changeAmountBrl = Number((changeAmountUsdt * usdtBrlRate).toFixed(2));
+    const rawLastPrice = Number(ticker.lastPrice);
+    const priceUsdt = Number.isFinite(rawLastPrice) && rawLastPrice > 0 ? rawLastPrice : null;
 
-    const dayHighUsdt = ticker.highPrice ? Number(ticker.highPrice) : null;
-    const dayLowUsdt = ticker.lowPrice ? Number(ticker.lowPrice) : null;
-    const volume24hUsdt = ticker.quoteVolume ? Number(ticker.quoteVolume) : null;
+    // Do NOT produce an artificial BRL parity if usdtBrlRate or priceUsdt is missing/invalid
+    const priceBrl =
+      priceUsdt !== null && usdtBrlRate !== null && Number.isFinite(usdtBrlRate) && usdtBrlRate > 0
+        ? Number((priceUsdt * usdtBrlRate).toFixed(2))
+        : null;
 
-    let quoteTimestamp = fetchedAt;
-    if (ticker.closeTime) {
+    const rawChangePct = Number(ticker.priceChangePercent);
+    const changePct = Number.isFinite(rawChangePct) ? rawChangePct : null;
+
+    const rawChangeAmtUsdt = Number(ticker.priceChange);
+    const changeAmountUsdt = Number.isFinite(rawChangeAmtUsdt) ? rawChangeAmtUsdt : null;
+
+    const changeAmountBrl =
+      changeAmountUsdt !== null && usdtBrlRate !== null && Number.isFinite(usdtBrlRate) && usdtBrlRate > 0
+        ? Number((changeAmountUsdt * usdtBrlRate).toFixed(2))
+        : null;
+
+    const rawHigh = Number(ticker.highPrice);
+    const dayHighUsdt = Number.isFinite(rawHigh) && rawHigh > 0 ? rawHigh : null;
+
+    const rawLow = Number(ticker.lowPrice);
+    const dayLowUsdt = Number.isFinite(rawLow) && rawLow > 0 ? rawLow : null;
+
+    const rawVol = Number(ticker.quoteVolume);
+    const volume24hUsdt = Number.isFinite(rawVol) && rawVol >= 0 ? rawVol : null;
+
+    // Differentiate provider quote time from FinAI fetch time
+    let quoteTimestamp: string | null = null;
+    if (typeof ticker.closeTime === 'number' && ticker.closeTime > 0) {
       quoteTimestamp = new Date(Number(ticker.closeTime)).toISOString();
     }
 
@@ -247,6 +276,7 @@ export async function fetchCryptoDualQuotes(
       quoteTimestamp,
       fetchedAt,
       isStale: false,
+      source: 'network',
     };
 
     const asset: MarketAsset = {
@@ -280,16 +310,21 @@ export async function fetchBinanceKlines(
 ): Promise<HistoricalCandle[]> {
   const config = getBinanceConfig(customConfig);
   const sym = symbol.toUpperCase().trim();
-  const endpoint = `/klines?symbol=${encodeURIComponent(sym)}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
+  const safeLimit = Math.max(1, Math.min(1000, Number(limit) || 30));
+  const endpoint = `/klines?symbol=${encodeURIComponent(sym)}&interval=${encodeURIComponent(interval)}&limit=${safeLimit}`;
 
   const res = await executeBinanceRequest(endpoint, config);
   const data = await res.json();
 
   if (!Array.isArray(data)) return [];
 
-  return data.map((k: (number | string)[]) => {
+  const candles: HistoricalCandle[] = [];
+  for (const k of data) {
+    if (!Array.isArray(k) || k.length < 6) continue;
     const openTime = Number(k[0]);
-    return {
+    if (!Number.isFinite(openTime) || openTime <= 0) continue;
+
+    candles.push({
       timestamp: openTime,
       date: new Date(openTime).toISOString().split('T')[0],
       open: Number(k[1]) || 0,
@@ -297,8 +332,10 @@ export async function fetchBinanceKlines(
       low: Number(k[3]) || 0,
       close: Number(k[4]) || 0,
       volume: Number(k[5]) || 0,
-    };
-  });
+    });
+  }
+
+  return candles;
 }
 
 /**
@@ -318,9 +355,9 @@ export function searchPopularCryptoAssets(query?: string): MarketAsset[] {
     id: `CRYPTO:${p.symbol}`,
     symbol: p.symbol,
     name: p.name,
-    assetType: 'CRYPTO',
-    market: 'CRYPTO',
-    currency: 'USDT',
+    assetType: 'CRYPTO' as const,
+    market: 'CRYPTO' as const,
+    currency: 'USDT' as const,
     sector: 'Criptoativos',
     subType: 'spot',
     updatedAt: now,

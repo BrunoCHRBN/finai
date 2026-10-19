@@ -9,13 +9,14 @@ import {
   CheckCircle2, 
   ArrowRight,
   Clock,
-  ShieldCheck,
-  Database,
-  Cpu,
   Radio,
   Sliders,
   Check
 } from 'lucide-react';
+import { PageHeader } from './ui/PageHeader';
+import { MetricCard } from './ui/MetricCard';
+import { StatusBadge } from './ui/StatusBadge';
+import { FinancialDataTable } from './ui/FinancialDataTable';
 
 interface OpenFinanceViewProps {
   accounts: any[];
@@ -132,50 +133,69 @@ export function OpenFinanceView({
 
   return (
     <div className="space-y-6">
-      {/* 1. Header: Display Title & Quick Action */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-[#E7E1D7]">
-        <div>
-          <div className="text-[11px] font-sans font-semibold uppercase tracking-wider text-[#777A72] mb-1">
-            Infraestrutura de Dados & Open Finance Brasil
+      {/* 1. Header: PageHeader Component */}
+      <PageHeader
+        kicker="Infraestrutura de Dados & Open Finance"
+        title="Contas & Conexões Institucionais"
+        description="Gestão de consentimentos, sincronizações inteligentes e canais de atualização com Pluggy API v2."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => onSync()}
+              disabled={isSyncing}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-[#E7E1D7] bg-[#FFFFFF] hover:bg-[#F3F1EB] text-xs font-sans font-medium text-[#242823] transition-colors disabled:opacity-50 cursor-pointer min-h-[38px]"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[#5F635C] ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Sincronizando...' : 'Atualizar Todas'}</span>
+            </button>
+
+            <button
+              onClick={onOpenPluggyConnect}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-[#253A32] hover:bg-[#1B2B25] text-white text-xs font-sans font-medium transition-colors shadow-xs cursor-pointer min-h-[38px]"
+            >
+              <Plus className="w-3.5 h-3.5 text-white" />
+              <span>Conectar Instituição</span>
+            </button>
           </div>
-          <h1 className="font-serif text-3xl md:text-4xl text-[#242823] tracking-tight">
-            Contas & Conexões Institucionais
-          </h1>
-          <p className="text-xs font-sans text-[#5F635C] mt-1">
-            Gestão de consentimentos, sincronizações inteligentes e canais de atualização com Pluggy API v2.
-          </p>
-        </div>
+        }
+      />
 
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => onSync()}
-            disabled={isSyncing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#E7E1D7] bg-[#FFFFFF] hover:bg-[#F3F1EB] text-xs font-sans font-medium text-[#242823] transition-colors disabled:opacity-50 cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-[#5F635C] ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Sincronizando...' : 'Atualizar Todas'}</span>
-          </button>
+      {/* 2. Institutional Connection Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <MetricCard
+          label="Contas Ativas Reconciliadas"
+          value={`${accounts.length} contas`}
+          badge={<StatusBadge status="success">Open Finance Ativo</StatusBadge>}
+          footer={<span className="text-xs text-[#5F635C]">C6 Bank & Itaú conectados</span>}
+        />
 
-          <button
-            onClick={onOpenPluggyConnect}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#253A32] hover:bg-[#1B2B25] text-white text-xs font-sans font-medium transition-colors shadow-xs cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-white" />
-            <span>Conectar Instituição</span>
-          </button>
-        </div>
+        <MetricCard
+          label="Saldo Disponível em Caixa"
+          value={formatCurrency(totalBalance)}
+          tone="brand"
+          badge={<StatusBadge status="brand">Disponibilidade Imediata</StatusBadge>}
+          footer={<span className="text-xs text-[#5F635C]">Liquidez para despesas correntes</span>}
+        />
+
+        <MetricCard
+          label="Faturas Abertas (Crédito)"
+          value={formatCurrency(totalCreditDebt)}
+          tone={totalCreditDebt > 0 ? 'danger' : 'default'}
+          badge={<StatusBadge status={totalCreditDebt > 0 ? 'warning' : 'success'}>Compromissos</StatusBadge>}
+          footer={<span className="text-xs text-[#5F635C]">Total a liquidar nos cartões</span>}
+        />
       </div>
 
-      {/* 2. Architecture Clarity: 3 Distinct Phases */}
-      <div className="p-5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
+      {/* 3. Architecture Clarity: 3 Distinct Phases */}
+      <div className="p-4 sm:p-5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
           <div className="flex items-center gap-2">
             <Radio className="w-4 h-4 text-[#253A32]" />
             <h3 className="font-serif text-sm font-bold text-[#242823]">
               Arquitetura de Sincronização Inteligente em 3 Etapas
             </h3>
           </div>
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#E4EFE6] text-[#245A3C] font-semibold border border-[#D1E2D4]">
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#E4EFE6] text-[#245A3C] font-semibold border border-[#D1E2D4] w-fit">
             ISOLAMENTO CONTÁBIL ESTRITO
           </span>
         </div>
@@ -183,7 +203,7 @@ export function OpenFinanceView({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
           <div className="p-3.5 rounded-md border border-[#E7E1D7] bg-[#F6F3ED] space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-[#253A32] text-white font-mono text-[11px] flex items-center justify-center font-bold">1</span>
+              <span className="w-5 h-5 rounded-full bg-[#253A32] text-white font-mono text-[11px] flex items-center justify-center font-bold shrink-0">1</span>
               <span className="text-xs font-bold text-[#242823] font-sans">Conexão & Consentimento</span>
             </div>
             <p className="text-[11px] text-[#5F635C] leading-relaxed">
@@ -193,7 +213,7 @@ export function OpenFinanceView({
 
           <div className="p-3.5 rounded-md border border-[#E7E1D7] bg-[#F6F3ED] space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-[#253A32] text-white font-mono text-[11px] flex items-center justify-center font-bold">2</span>
+              <span className="w-5 h-5 rounded-full bg-[#253A32] text-white font-mono text-[11px] flex items-center justify-center font-bold shrink-0">2</span>
               <span className="text-xs font-bold text-[#242823] font-sans">Sincronização & Normalização</span>
             </div>
             <p className="text-[11px] text-[#5F635C] leading-relaxed">
@@ -203,7 +223,7 @@ export function OpenFinanceView({
 
           <div className="p-3.5 rounded-md border border-[#E7E1D7] bg-[#F6F3ED] space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-[#253A32] text-white font-mono text-[11px] flex items-center justify-center font-bold">3</span>
+              <span className="w-5 h-5 rounded-full bg-[#253A32] text-white font-mono text-[11px] flex items-center justify-center font-bold shrink-0">3</span>
               <span className="text-xs font-bold text-[#242823] font-sans">Recálculo & Conciliação</span>
             </div>
             <p className="text-[11px] text-[#5F635C] leading-relaxed">
@@ -213,8 +233,8 @@ export function OpenFinanceView({
         </div>
       </div>
 
-      {/* 3. Automation Cadence & Webhook Telemetry */}
-      <div className="p-5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs grid grid-cols-1 md:grid-cols-2 gap-5">
+      {/* 4. Automation Cadence & Webhook Telemetry */}
+      <div className="p-4 sm:p-5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs grid grid-cols-1 md:grid-cols-2 gap-5">
         <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -249,7 +269,7 @@ export function OpenFinanceView({
                   type="button"
                   disabled={isSavingInterval}
                   onClick={() => handleSaveInterval(opt.val)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-sans transition-colors cursor-pointer border ${
+                  className={`px-3 py-1.5 rounded-md text-xs font-sans transition-colors cursor-pointer border min-h-[34px] ${
                     isSelected
                       ? 'bg-[#253A32] text-white border-[#253A32] font-semibold'
                       : 'bg-[#F6F3ED] text-[#5F635C] border-[#E7E1D7] hover:border-[#D6CFC2]'
@@ -261,12 +281,12 @@ export function OpenFinanceView({
             })}
           </div>
 
-          <div className="pt-2 flex flex-col sm:flex-row sm:items-center gap-3 text-xs text-[#777A72] font-mono border-t border-[#F0EDE6]">
+          <div className="pt-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-xs text-[#777A72] font-mono border-t border-[#F0EDE6]">
             <div>Última: <strong className="text-[#242823]">{formatDate(lastSyncAt || undefined)}</strong></div>
-            <div>Próxima verificação devida: <strong className="text-[#242823]">{formatDate(nextScheduledSyncAt || undefined)}</strong></div>
+            <div>Próxima: <strong className="text-[#242823]">{formatDate(nextScheduledSyncAt || undefined)}</strong></div>
           </div>
-          <div className="text-[11px] text-[#777A72] font-sans bg-[#FAF8F5] p-2 rounded border border-[#E7E1D7]">
-            <strong>Mecanismo de Execução:</strong> A verificação é avaliada sob demanda ao navegar pelas telas ou quando disparada por um agendador externo (cron/CLI). O servidor Next.js local não mantém workers em segundo plano com a interface fechada.
+          <div className="text-[11px] text-[#777A72] font-sans bg-[#FAF8F5] p-2.5 rounded border border-[#E7E1D7]">
+            <strong>Mecanismo de Execução:</strong> A verificação é avaliada sob demanda ao navegar pelas telas ou quando disparada por um agendador externo.
           </div>
         </div>
 
@@ -274,14 +294,14 @@ export function OpenFinanceView({
           <div className="flex items-center gap-2">
             <Radio className="w-4 h-4 text-[#245A3C]" />
             <h4 className="text-xs font-bold text-[#242823] font-sans uppercase tracking-wider">
-              Webhook Oficial de Eventos em Tempo Real
+              Webhook de Eventos em Tempo Real
             </h4>
           </div>
           <p className="text-xs text-[#5F635C] font-sans leading-relaxed">
             Notificações instantâneas de novos lançamentos enviadas pela Pluggy diretamente para a API FinAI.
           </p>
 
-          <div className="p-2.5 rounded bg-[#F6F3ED] border border-[#E7E1D7] font-mono text-[11px] text-[#242823] flex items-center justify-between">
+          <div className="p-2.5 rounded bg-[#F6F3ED] border border-[#E7E1D7] font-mono text-[11px] text-[#242823] flex flex-wrap items-center justify-between gap-2">
             <span>POST /api/pluggy/webhook</span>
             <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#E4EFE6] text-[#245A3C] font-bold border border-[#D1E2D4]">
               Idempotente (SHA-256)
@@ -289,58 +309,19 @@ export function OpenFinanceView({
           </div>
 
           <div className="text-[11px] text-[#777A72] font-sans bg-[#FAF8F5] p-2.5 rounded border border-[#E7E1D7]">
-            <strong>Ambiente Local:</strong> Para receber webhooks externos da Pluggy durante desenvolvimento, execute um túnel público (como <code className="font-mono text-[#242823]">ngrok http 3000</code>) ou utilize chamadas locais simuladas.
+            <strong>Ambiente Local:</strong> Para receber webhooks externos da Pluggy durante desenvolvimento, utilize um túnel público (<code className="font-mono text-[#242823]">ngrok http 3000</code>) ou testes automatizados.
           </div>
         </div>
       </div>
 
-      {/* 4. Institutional Connection Summary Banner */}
-      <div className="p-5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <div className="text-[11px] font-sans font-semibold text-[#777A72] uppercase">
-            Contas Ativas Reconciliadas
-          </div>
-          <div className="text-2xl font-serif font-bold text-[#242823] mt-0.5">
-            {accounts.length} contas
-          </div>
-          <div className="text-[11px] text-[#5F635C] font-sans mt-0.5">
-            C6 Bank & Itaú conectados
-          </div>
-        </div>
-
-        <div>
-          <div className="text-[11px] font-sans font-semibold text-[#777A72] uppercase">
-            Saldo Disponível em Caixa
-          </div>
-          <div className="text-2xl font-serif font-bold text-[#245A3C] tabular-nums mt-0.5">
-            {formatCurrency(totalBalance)}
-          </div>
-          <div className="text-[11px] text-[#5F635C] font-sans mt-0.5">
-            Disponibilidade imediata apurada
-          </div>
-        </div>
-
-        <div>
-          <div className="text-[11px] font-sans font-semibold text-[#777A72] uppercase">
-            Faturas Abertas (Crédito)
-          </div>
-          <div className="text-2xl font-serif font-bold text-[#963F36] tabular-nums mt-0.5">
-            {formatCurrency(totalCreditDebt)}
-          </div>
-          <div className="text-[11px] text-[#5F635C] font-sans mt-0.5">
-            Total a liquidar nos cartões
-          </div>
-        </div>
-      </div>
-
-      {/* 5. Meu Pluggy Direct Item ID Sync Box */}
+      {/* 5. Direct Item ID Sync Box */}
       <div className="p-4 rounded-lg border border-[#E7E1D7] bg-[#F6F3ED] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-[#242823] font-sans">
               Importação Direta de Conexão Meu Pluggy
             </span>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#E4EFE6] text-[#245A3C] font-medium border border-[#D1E2D4]">
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#E4EFE6] text-[#245A3C] font-medium border border-[#D1E2D4]">
               PESSOA FÍSICA
             </span>
           </div>
@@ -349,100 +330,96 @@ export function OpenFinanceView({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
           <input
             type="text"
             value={customItemId}
             onChange={(e) => setCustomItemId(e.target.value)}
             placeholder="Cole o Item ID da conexão..."
-            className="px-3 py-1.5 rounded-md bg-[#FFFFFF] border border-[#E7E1D7] text-xs font-mono text-[#242823] placeholder-[#777A72] focus:outline-none focus:border-[#253A32] w-full md:w-72"
+            className="px-3 py-2 rounded-md bg-[#FFFFFF] border border-[#E7E1D7] text-xs font-mono text-[#242823] placeholder-[#777A72] focus:outline-none focus:border-[#253A32] w-full sm:w-72 min-h-[38px]"
           />
           <button
             onClick={handleSyncCustomItem}
             disabled={isSyncing || !customItemId.trim()}
-            className="px-3.5 py-1.5 rounded-md bg-[#253A32] hover:bg-[#1B2B25] text-white font-medium text-xs font-sans transition-colors disabled:opacity-50 shrink-0 cursor-pointer"
+            className="px-3.5 py-2 rounded-md bg-[#253A32] hover:bg-[#1B2B25] text-white font-medium text-xs font-sans transition-colors disabled:opacity-50 shrink-0 cursor-pointer min-h-[38px]"
           >
             {isSyncing ? 'Sincronizando...' : 'Puxar Dados'}
           </button>
         </div>
       </div>
 
-      {/* 6. Active Accounts Ledger */}
-      <div className="rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#E7E1D7] bg-[#F6F3ED] flex items-center justify-between text-[11px] font-sans font-semibold tracking-wider text-[#777A72] uppercase">
-          <span>Contas e Cartões em Operação ({accounts.length})</span>
-          <span className="text-[10px] text-[#245A3C] font-mono">Conectado via API v2</span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-sans border-collapse">
-            <thead>
-              <tr className="border-b border-[#E7E1D7] text-[#777A72] text-[11px] font-semibold uppercase">
-                <th className="py-2.5 px-4">Instituição / Conta</th>
-                <th className="py-2.5 px-4 w-40">Tipo de Ativo</th>
-                <th className="py-2.5 px-4 w-48">Última Sincronização</th>
-                <th className="py-2.5 px-4 w-32">Status</th>
-                <th className="py-2.5 px-4 w-40 text-right">Saldo Apurado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E7E1D7]">
-              {accounts.map((acc) => {
-                const isCard = acc.type === 'CREDIT_CARD';
-                return (
-                  <tr key={acc.id} className="hover:bg-[#F3F1EB] transition-colors">
-                    {/* Account Name */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 rounded bg-[#F0EDE6] text-[#253A32]">
-                          {isCard ? <CreditCard className="w-4 h-4" /> : <Landmark className="w-4 h-4" />}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-[#242823]">{acc.name}</div>
-                          <div className="text-[11px] text-[#777A72] font-mono">
-                            {acc.pluggyItemId ? `Item: ${acc.pluggyItemId.slice(0, 16)}...` : 'Conta Interna'}
-                          </div>
+      {/* 6. Active Accounts Ledger wrapped in FinancialDataTable */}
+      <FinancialDataTable
+        title={`Contas e Cartões em Operação (${accounts.length})`}
+        description="Conexões bancárias monitoradas com reconciliação automática de saldos e extratos."
+      >
+        <table className="w-full text-left text-xs font-sans border-collapse min-w-[620px]">
+          <thead>
+            <tr className="border-b border-[#E7E1D7] text-[#777A72] text-[11px] font-semibold uppercase bg-[#FAF8F5]">
+              <th className="py-2.5 px-4">Instituição / Conta</th>
+              <th className="py-2.5 px-4 w-40">Tipo de Ativo</th>
+              <th className="py-2.5 px-4 w-48">Última Sincronização</th>
+              <th className="py-2.5 px-4 w-32">Status</th>
+              <th className="py-2.5 px-4 w-40 text-right">Saldo Apurado</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#E7E1D7]">
+            {accounts.map((acc) => {
+              const isCard = acc.type === 'CREDIT_CARD';
+              return (
+                <tr key={acc.id} className="hover:bg-[#F3F1EB] transition-colors">
+                  {/* Account Name */}
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-1.5 rounded bg-[#F0EDE6] text-[#253A32] shrink-0">
+                        {isCard ? <CreditCard className="w-4 h-4" /> : <Landmark className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-[#242823]">{acc.name}</div>
+                        <div className="text-[11px] text-[#777A72] font-mono">
+                          {acc.pluggyItemId ? `Item: ${acc.pluggyItemId.slice(0, 16)}...` : 'Conta Interna'}
                         </div>
                       </div>
-                    </td>
+                    </div>
+                  </td>
 
-                    {/* Account Type */}
-                    <td className="py-3 px-4 text-[#5F635C]">
-                      {isCard ? 'Cartão de Crédito' : acc.type === 'INVESTMENT' ? 'Custódia & Investimentos' : 'Conta Corrente'}
-                    </td>
+                  {/* Account Type */}
+                  <td className="py-3 px-4 text-[#5F635C]">
+                    {isCard ? 'Cartão de Crédito' : acc.type === 'INVESTMENT' ? 'Custódia & Investimentos' : 'Conta Corrente'}
+                  </td>
 
-                    {/* Sync Date */}
-                    <td className="py-3 px-4 font-mono text-[#5F635C] text-[11px]">
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-[#777A72]" />
-                        <span>{formatDate(acc.updatedAt)}</span>
-                      </div>
-                    </td>
+                  {/* Sync Date */}
+                  <td className="py-3 px-4 font-mono text-[#5F635C] text-[11px]">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-[#777A72] shrink-0" />
+                      <span>{formatDate(acc.updatedAt)}</span>
+                    </div>
+                  </td>
 
-                    {/* Status Badge */}
-                    <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-sans font-medium bg-[#E4EFE6] text-[#245A3C] border border-[#D1E2D4]">
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>Reconciliado</span>
-                      </span>
-                    </td>
+                  {/* Status Badge */}
+                  <td className="py-3 px-4">
+                    <StatusBadge status="success">
+                      <CheckCircle2 className="w-3 h-3 inline mr-1" />
+                      Reconciliado
+                    </StatusBadge>
+                  </td>
 
-                    {/* Balance */}
-                    <td className="py-3 px-4 text-right font-mono font-bold tabular-nums">
-                      <span className={isCard ? 'text-[#963F36]' : 'text-[#245A3C]'}>
-                        {formatCurrency(acc.balance)}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  {/* Balance */}
+                  <td className="py-3 px-4 text-right font-mono font-bold tabular-nums">
+                    <span className={isCard ? 'text-[#963F36]' : 'text-[#245A3C]'}>
+                      {formatCurrency(acc.balance)}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </FinancialDataTable>
 
       {/* 7. Supported Connectors in Open Finance Catalog */}
-      <div className="p-5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs">
-        <div className="flex items-center justify-between mb-3">
+      <div className="p-4 sm:p-5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
           <div>
             <h3 className="font-serif text-base text-[#242823] font-bold">
               Catálogo de Conectores Suportados (Open Finance)
@@ -453,14 +430,14 @@ export function OpenFinanceView({
           </div>
           <button
             onClick={onOpenPluggyConnect}
-            className="text-xs font-sans font-medium text-[#253A32] hover:underline flex items-center gap-1 cursor-pointer"
+            className="text-xs font-sans font-medium text-[#253A32] hover:underline flex items-center gap-1 cursor-pointer w-fit"
           >
             <span>Ver todas as instituições</span>
             <ArrowRight className="w-3 h-3" />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
           {supportedInstitutions.map((c, i) => (
             <div
               key={i}

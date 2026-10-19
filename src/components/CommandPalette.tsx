@@ -163,11 +163,11 @@ export function CommandPalette({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4 bg-[#242823]/40 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-12 sm:pt-24 px-3 sm:px-4 bg-[#242823]/40 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto"
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-xl rounded-xl border border-[#E7E1D7] bg-[#FFFFFF] shadow-2xl overflow-hidden"
+        className="w-full max-w-xl my-auto rounded-xl border border-[#E7E1D7] bg-[#FFFFFF] shadow-2xl overflow-hidden max-h-[85dvh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search header */}
@@ -190,7 +190,7 @@ export function CommandPalette({
         </div>
 
         {/* Action list */}
-        <div className="max-h-80 overflow-y-auto p-2 space-y-1">
+        <div className="max-h-[60dvh] overflow-y-auto p-2 space-y-1 flex-1">
           {filtered.length === 0 ? (
             <div className="py-8 text-center text-xs text-[#777A72]">
               Nenhum comando localizado para &quot;{query}&quot;.
@@ -226,7 +226,7 @@ export function CommandPalette({
         </div>
 
         {/* Footer shortcuts */}
-        <div className="px-4 py-2 bg-[#F0EDE6] border-t border-[#E7E1D7] flex items-center justify-between text-[10px] text-[#777A72] font-mono">
+        <div className="px-4 py-2 bg-[#F0EDE6] border-t border-[#E7E1D7] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 text-[10px] text-[#777A72] font-mono">
           <span>Navegue pelas ações e pressione Enter</span>
           <span className="flex items-center gap-1.5">
             <kbd className="px-1.5 py-0.5 rounded bg-[#FFFFFF] border border-[#E7E1D7] text-[#242823] font-mono">ESC</kbd>

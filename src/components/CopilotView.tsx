@@ -23,6 +23,8 @@ import {
   FileSpreadsheet,
   Calendar,
 } from 'lucide-react';
+import { PageHeader } from './ui/PageHeader';
+import { StatusBadge } from './ui/StatusBadge';
 
 interface CopilotObservation {
   title: string;
@@ -468,82 +470,67 @@ export function CopilotView(_props?: CopilotViewProps) {
 
   return (
     <div className="space-y-6 font-sans">
-      {/* 1. Editorial Page Header */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-3 border-b border-[#E7E1D7]">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className="text-[11px] font-sans font-semibold uppercase tracking-wider text-[#777A72]">
-              Inteligência Consultiva • Arquitetura Multimodelo Gemini
-            </span>
+      {/* 1. PageHeader Component */}
+      <PageHeader
+        kicker="Inteligência Consultiva • Multimodelo Gemini"
+        title="Copiloto & Análise Financeira"
+        description="Diagnóstico explicável e chat contextual de baixa latência fundamentados nos motores determinísticos de Caixa, Patrimônio e Planejamento."
+        badge={
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#F0EDE6] text-[#242823] border border-[#E7E1D7]">
               <Zap className="w-3 h-3 text-[#245A3C]" />
-              Fast:{' '}
-              {diagnosisData?.runtimeConfig?.fastModel ||
-                'gemini-3.5-flash-lite'}
+              Fast: {diagnosisData?.runtimeConfig?.fastModel || 'gemini-3.5-flash-lite'}
             </span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#F5EEDB] text-[#795C24] border border-[#E8DEC7]">
               <Cpu className="w-3 h-3 text-[#795C24]" />
-              Advanced:{' '}
-              {diagnosisData?.runtimeConfig?.advancedModel ||
-                'gemini-3.8-flash'}
+              Advanced: {diagnosisData?.runtimeConfig?.advancedModel || 'gemini-3.8-flash'}
             </span>
           </div>
-          <h1 className="font-serif text-3xl md:text-4xl text-[#242823] tracking-tight">
-            Copiloto & Análise Financeira
-          </h1>
-          <p className="text-xs font-sans text-[#5F635C] mt-1">
-            Diagnóstico explicável e chat contextual de baixa latência
-            fundamentados nos motores determinísticos de Caixa, Patrimônio e
-            Planejamento.
-          </p>
-        </div>
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#E7E1D7] bg-[#FFFFFF] text-xs min-h-[38px]">
+              <Calendar className="w-3.5 h-3.5 text-[#777A72]" />
+              <span className="text-[#777A72] font-medium">Período:</span>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                aria-label="Selecionar mês de referência"
+                className="font-mono font-semibold text-[#242823] bg-transparent focus:outline-none cursor-pointer"
+              >
+                {availableMonths.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#E7E1D7] bg-[#FFFFFF] text-xs">
-            <Calendar className="w-3.5 h-3.5 text-[#777A72]" />
-            <span className="text-[#777A72] font-medium">Período:</span>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              aria-label="Selecionar mês de referência"
-              className="font-mono font-semibold text-[#242823] bg-transparent focus:outline-none cursor-pointer"
+            <button
+              onClick={() => setShowPayloadModal((v) => !v)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-[#D6CFC2] bg-[#FFFFFF] hover:bg-[#F3F1EB] text-xs font-sans font-medium text-[#242823] transition-colors min-h-[38px]"
             >
-              {availableMonths.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+              <Database className="w-3.5 h-3.5 text-[#5F635C]" />
+              <span>{showPayloadModal ? 'Ocultar Snapshot' : 'Inspecionar Snapshot'}</span>
+            </button>
+
+            <button
+              onClick={() => fetchDiagnosis(true)}
+              disabled={loadingDiagnosis}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-[#253A32] hover:bg-[#1B2B25] disabled:opacity-50 text-xs font-sans font-medium text-[#FFFFFF] transition-colors shadow-xs min-h-[38px]"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 text-[#B29A70] ${loadingDiagnosis ? 'animate-spin' : ''}`}
+              />
+              <span>Recalcular Diagnóstico</span>
+            </button>
           </div>
-
-          <button
-            onClick={() => setShowPayloadModal((v) => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D6CFC2] bg-[#FFFFFF] hover:bg-[#F3F1EB] text-xs font-sans font-medium text-[#242823] transition-colors"
-          >
-            <Database className="w-3.5 h-3.5 text-[#5F635C]" />
-            <span>
-              {showPayloadModal ? 'Ocultar Snapshot' : 'Inspecionar Snapshot'}
-            </span>
-          </button>
-
-          <button
-            onClick={() => fetchDiagnosis(true)}
-            disabled={loadingDiagnosis}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#253A32] hover:bg-[#1B2B25] disabled:opacity-50 text-xs font-sans font-medium text-[#FFFFFF] transition-colors shadow-xs"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 text-[#B29A70] ${
-                loadingDiagnosis ? 'animate-spin' : ''
-              }`}
-            />
-            <span>Recalcular Diagnóstico</span>
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* 2. Operational Telemetry Strip */}
       {observability && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-[#FFFFFF] border border-[#E7E1D7] rounded-lg p-3.5 shadow-xs text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-[#FFFFFF] border border-[#E7E1D7] rounded-lg p-3.5 shadow-xs text-xs">
           <div className="flex items-center gap-2.5">
             <Clock className="w-4 h-4 text-[#B29A70] shrink-0" />
             <div>

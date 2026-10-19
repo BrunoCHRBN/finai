@@ -3,10 +3,11 @@ import { ensureDbInitialized } from '@/db';
 import { getWatchlist, addToWatchlist } from '@/lib/market/market-service';
 import { handleApiError } from '@/lib/api-error';
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     await ensureDbInitialized();
-    const items = await getWatchlist();
+    const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true';
+    const items = await getWatchlist({ forceRefresh });
     return NextResponse.json({ items, count: items.length });
   } catch (error: unknown) {
     return handleApiError(error, 'Erro ao carregar lista de ativos acompanhados.', 'market:watchlist:GET');

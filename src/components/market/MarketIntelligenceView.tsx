@@ -22,6 +22,8 @@ import type { MarketWatchlistItem, MarketOverviewSummary } from '@/lib/market/ty
 
 export function MarketIntelligenceView() {
   const [activeTab, setActiveTab] = useState<'B3' | 'CRYPTO' | 'WATCHLIST'>('B3');
+  const [selectedB3Symbol, setSelectedB3Symbol] = useState<string | null>(null);
+  const [selectedCryptoSymbol, setSelectedCryptoSymbol] = useState<string | null>(null);
   const [overview, setOverview] = useState<MarketOverviewSummary | null>(null);
   const [watchlist, setWatchlist] = useState<MarketWatchlistItem[]>([]);
   const [isLoadingOverview, setIsLoadingOverview] = useState(true);
@@ -125,7 +127,13 @@ export function MarketIntelligenceView() {
   // Quick navigation from watchlist click
   const handleSelectAssetFromWatchlist = (symbol: string, market: 'B3' | 'CRYPTO') => {
     startTransition(() => {
-      setActiveTab(market === 'CRYPTO' ? 'CRYPTO' : 'B3');
+      if (market === 'CRYPTO') {
+        setSelectedCryptoSymbol(symbol);
+        setActiveTab('CRYPTO');
+      } else {
+        setSelectedB3Symbol(symbol);
+        setActiveTab('B3');
+      }
     });
   };
 
@@ -175,7 +183,7 @@ export function MarketIntelligenceView() {
         <div className="bg-white p-3.5 rounded-xl border border-[#E7E1D7] shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-mono uppercase text-[#777A72]">Ibovespa</span>
-            {ibov && (
+            {ibov && ibov.change24hPct != null && (
               <span
                 className={`text-[11px] font-mono font-medium flex items-center ${
                   ibov.change24hPct >= 0 ? 'text-emerald-700' : 'text-red-700'
@@ -187,7 +195,7 @@ export function MarketIntelligenceView() {
             )}
           </div>
           <div className="font-mono text-[16px] font-bold text-[#242823] mt-1">
-            {ibov ? `${ibov.price.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} pts` : '--'}
+            {ibov && ibov.price != null ? `${ibov.price.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} pts` : '--'}
           </div>
           <div className="text-[10px] font-sans text-[#777A72]">B3 Índice Principal</div>
         </div>
@@ -196,7 +204,7 @@ export function MarketIntelligenceView() {
         <div className="bg-white p-3.5 rounded-xl border border-[#E7E1D7] shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-mono uppercase text-[#777A72]">IFIX</span>
-            {ifix && (
+            {ifix && ifix.change24hPct != null && (
               <span
                 className={`text-[11px] font-mono font-medium flex items-center ${
                   ifix.change24hPct >= 0 ? 'text-emerald-700' : 'text-red-700'
@@ -208,7 +216,7 @@ export function MarketIntelligenceView() {
             )}
           </div>
           <div className="font-mono text-[16px] font-bold text-[#242823] mt-1">
-            {ifix ? `${ifix.price.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} pts` : '--'}
+            {ifix && ifix.price != null ? `${ifix.price.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} pts` : '--'}
           </div>
           <div className="text-[10px] font-sans text-[#777A72]">Fundos Imobiliários</div>
         </div>
@@ -220,9 +228,9 @@ export function MarketIntelligenceView() {
             <span className="text-[10px] font-mono text-[#253A32] bg-[#253A32]/10 px-1 rounded">Spot</span>
           </div>
           <div className="font-mono text-[16px] font-bold text-[#242823] mt-1">
-            {overview?.usdtBrlRate
+            {overview?.usdtBrlRate != null
               ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(overview.usdtBrlRate)
-              : 'R$ 5,65'}
+              : 'Indisponível'}
           </div>
           <div className="text-[10px] font-sans text-[#777A72]">Câmbio Paridade Binance</div>
         </div>
@@ -231,7 +239,7 @@ export function MarketIntelligenceView() {
         <div className="bg-white p-3.5 rounded-xl border border-[#E7E1D7] shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-mono uppercase text-[#777A72]">Bitcoin</span>
-            {btc && (
+            {btc && btc.change24hPct != null && (
               <span
                 className={`text-[11px] font-mono font-medium flex items-center ${
                   btc.change24hPct >= 0 ? 'text-emerald-700' : 'text-red-700'
@@ -243,10 +251,10 @@ export function MarketIntelligenceView() {
             )}
           </div>
           <div className="font-mono text-[16px] font-bold text-[#242823] mt-1">
-            {btc ? `$ ${btc.priceUsdt.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '--'}
+            {btc && btc.priceUsdt != null ? `$ ${btc.priceUsdt.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '--'}
           </div>
           <div className="text-[10px] font-mono text-[#253A32]">
-            {btc ? `≈ R$ ${(btc.priceBrl / 1000).toFixed(0)}k` : '--'}
+            {btc && btc.priceBrl != null ? `≈ R$ ${(btc.priceBrl / 1000).toFixed(0)}k` : '--'}
           </div>
         </div>
 
@@ -254,7 +262,7 @@ export function MarketIntelligenceView() {
         <div className="bg-white p-3.5 rounded-xl border border-[#E7E1D7] shadow-xs col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-mono uppercase text-[#777A72]">Ethereum</span>
-            {eth && (
+            {eth && eth.change24hPct != null && (
               <span
                 className={`text-[11px] font-mono font-medium flex items-center ${
                   eth.change24hPct >= 0 ? 'text-emerald-700' : 'text-red-700'
@@ -266,10 +274,10 @@ export function MarketIntelligenceView() {
             )}
           </div>
           <div className="font-mono text-[16px] font-bold text-[#242823] mt-1">
-            {eth ? `$ ${eth.priceUsdt.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '--'}
+            {eth && eth.priceUsdt != null ? `$ ${eth.priceUsdt.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '--'}
           </div>
           <div className="text-[10px] font-mono text-[#253A32]">
-            {eth ? `≈ R$ ${(eth.priceBrl / 1000).toFixed(1)}k` : '--'}
+            {eth && eth.priceBrl != null ? `≈ R$ ${(eth.priceBrl / 1000).toFixed(1)}k` : '--'}
           </div>
         </div>
       </div>
@@ -323,6 +331,8 @@ export function MarketIntelligenceView() {
         <StockMarketSection
           watchlistAssetIds={watchlistAssetIds}
           onToggleWatchlist={handleToggleWatchlist}
+          selectedSymbol={selectedB3Symbol}
+          onSelectSymbol={setSelectedB3Symbol}
         />
       )}
 
@@ -330,6 +340,8 @@ export function MarketIntelligenceView() {
         <CryptoMarketSection
           watchlistAssetIds={watchlistAssetIds}
           onToggleWatchlist={handleToggleWatchlist}
+          selectedSymbol={selectedCryptoSymbol}
+          onSelectSymbol={setSelectedCryptoSymbol}
         />
       )}
 

@@ -35,6 +35,7 @@ import {
   Area,
 } from 'recharts';
 import { FinancialMetrics } from '@/lib/ai/math-engine';
+import { PageHeader } from './ui/PageHeader';
 
 interface BudgetsViewProps {
   metrics: FinancialMetrics;
@@ -906,46 +907,39 @@ export function BudgetsView({
 
   return (
     <div className="space-y-6">
-      {/* 1. Header & Period Selector */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-3 border-b border-[#E7E1D7]">
-        <div>
-          <div className="text-[11px] font-sans font-semibold uppercase tracking-wider text-[#777A72] mb-1">
-            Planejamento Financeiro Prospectivo • Motor Determinístico
-          </div>
-          <h1 className="font-serif text-3xl md:text-4xl text-[#242823] tracking-tight">
-            Planejamento, Orçamentos, Metas & Projeções
-          </h1>
-          <p className="text-xs font-sans text-[#5F635C] mt-1">
-            Controle orçamentário por categoria, alocação de metas sem dupla contagem, projeção em 3 camadas e cenários reais.
-          </p>
-        </div>
+      {/* 1. Header & Period Selector using PageHeader */}
+      <PageHeader
+        kicker="Planejamento Financeiro Prospectivo"
+        title="Planejamento, Orçamentos, Metas & Projeções"
+        description="Controle orçamentário por categoria, alocação de metas sem dupla contagem, projeção em 3 camadas e cenários reais."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-[#E7E1D7] bg-[#FFFFFF] text-xs min-h-[38px]">
+              <Calendar className="w-3.5 h-3.5 text-[#253A32]" />
+              <span className="text-[#777A72]">Vigência:</span>
+              <select
+                value={selectedMonth}
+                onChange={(e) => handleMonthSelect(e.target.value)}
+                className="font-mono font-semibold text-[#242823] bg-transparent focus:outline-none cursor-pointer"
+              >
+                {availableMonths.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#E7E1D7] bg-[#FFFFFF] text-xs">
-            <Calendar className="w-3.5 h-3.5 text-[#253A32]" />
-            <span className="text-[#777A72]">Vigência:</span>
-            <select
-              value={selectedMonth}
-              onChange={(e) => handleMonthSelect(e.target.value)}
-              className="font-mono font-semibold text-[#242823] bg-transparent focus:outline-none cursor-pointer"
+            <button
+              onClick={fetchPlanningData}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md border border-[#E7E1D7] bg-[#FFFFFF] hover:bg-[#F3F1EB] text-xs font-medium text-[#242823] transition-colors cursor-pointer min-h-[38px]"
             >
-              {availableMonths.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Recalcular</span>
+            </button>
           </div>
-
-          <button
-            onClick={fetchPlanningData}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#E7E1D7] bg-[#FFFFFF] hover:bg-[#F3F1EB] text-xs font-medium text-[#242823] transition-colors cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>Recalcular</span>
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Stale Data Banner if detected */}
       {staleAlerts.length > 0 && (
@@ -966,8 +960,8 @@ export function BudgetsView({
         </div>
       )}
 
-      {/* 2. Sub-navigation Bar */}
-      <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs">
+      {/* 2. Sub-navigation Bar: Contained Horizontal Scroll on Mobile */}
+      <div className="flex items-center overflow-x-auto no-scrollbar gap-1.5 p-1.5 rounded-lg border border-[#E7E1D7] bg-[#FFFFFF] shadow-xs">
         {navTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeSection === tab.id;
@@ -975,7 +969,7 @@ export function BudgetsView({
             <button
               key={tab.id}
               onClick={() => setActiveSection(tab.id)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-sans transition-colors cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-sans whitespace-nowrap shrink-0 transition-colors cursor-pointer min-h-[36px] ${
                 isActive
                   ? 'bg-[#253A32] text-white font-semibold'
                   : 'text-[#5F635C] hover:text-[#242823] hover:bg-[#F3F1EB]'
@@ -985,7 +979,7 @@ export function BudgetsView({
               <span>{tab.label}</span>
               {tab.badge !== undefined && tab.badge > 0 && (
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
                     isActive ? 'bg-[#FFFFFF]/20 text-white' : 'bg-[#F0EDE6] text-[#242823]'
                   }`}
                 >
@@ -1303,7 +1297,7 @@ export function BudgetsView({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-sans border-collapse">
+              <table className="w-full text-left text-xs font-sans border-collapse min-w-[700px]">
                 <thead>
                   <tr className="border-b border-[#E7E1D7] bg-[#FAF8F5] text-[#777A72] text-[11px] font-semibold uppercase tracking-wider">
                     <th className="py-2.5 px-4">Categoria / Orçamento</th>
@@ -2046,7 +2040,7 @@ export function BudgetsView({
               </span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-sans border-collapse">
+              <table className="w-full text-left text-xs font-sans border-collapse min-w-[850px]">
                 <thead>
                   <tr className="border-b border-[#E7E1D7] bg-[#FAF8F5] text-[#777A72] text-[11px] font-semibold uppercase">
                     <th className="py-2.5 px-3">Mês</th>
@@ -2521,7 +2515,7 @@ export function BudgetsView({
             </h3>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-sans border-collapse">
+              <table className="w-full text-left text-xs font-sans border-collapse min-w-[700px]">
                 <thead>
                   <tr className="border-b border-[#E7E1D7] text-[#777A72] text-[11px] font-semibold uppercase">
                     <th className="py-2.5 px-3">Título / Descrição</th>
@@ -2845,7 +2839,8 @@ export function BudgetsView({
                   <h4 className="font-serif text-base font-bold text-[#242823] pb-2 border-b border-[#E7E1D7]">
                     Sensibilidade à Taxa de Retorno e ao Aporte Mensal
                   </h4>
-                  <table className="w-full text-left border-collapse font-mono text-[11px]">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse font-mono text-[11px] min-w-[380px]">
                     <thead>
                       <tr className="border-b border-[#E7E1D7] text-[#777A72] font-sans uppercase">
                         <th className="py-1.5">Cenário</th>
@@ -2869,6 +2864,7 @@ export function BudgetsView({
                       ))}
                     </tbody>
                   </table>
+                  </div>
 
                   <div className="pt-2">
                     <div className="text-[11px] font-semibold text-[#5F635C] mb-1.5">
@@ -2895,32 +2891,34 @@ export function BudgetsView({
                   <h4 className="font-serif text-base font-bold text-[#242823] pb-2 border-b border-[#E7E1D7]">
                     Sensibilidade da Taxa de Retirada (Independência Financeira)
                   </h4>
-                  <table className="w-full text-left border-collapse font-mono text-[11px]">
-                    <thead>
-                      <tr className="border-b border-[#E7E1D7] text-[#777A72] font-sans uppercase">
-                        <th className="py-1.5">Taxa Anual</th>
-                        <th className="py-1.5 text-right">Capital Necessário (Real)</th>
-                        <th className="py-1.5 text-right">Renda Projetada/Mês</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#E7E1D7]">
-                      {simResult.financialIndependence.withdrawalSensitivity.map((w: any) => (
-                        <tr key={w.annualWithdrawalRatePct}>
-                          <td className="py-2 font-bold text-[#242823]">
-                            {w.annualWithdrawalRatePct}% a.a.
-                          </td>
-                          <td className="py-2 text-right">{formatCurrency(w.requiredCapitalReal)}</td>
-                          <td
-                            className={`py-2 text-right font-bold ${
-                              w.reachesDesiredIncomeInHorizon ? 'text-[#245A3C]' : 'text-[#795C24]'
-                            }`}
-                          >
-                            {formatCurrency(w.projectedSustainableMonthlyIncomeReal)}
-                          </td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse font-mono text-[11px] min-w-[380px]">
+                      <thead>
+                        <tr className="border-b border-[#E7E1D7] text-[#777A72] font-sans uppercase">
+                          <th className="py-1.5">Taxa Anual</th>
+                          <th className="py-1.5 text-right">Capital Necessário (Real)</th>
+                          <th className="py-1.5 text-right">Renda Projetada/Mês</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-[#E7E1D7]">
+                        {simResult.financialIndependence.withdrawalSensitivity.map((w: any) => (
+                          <tr key={w.annualWithdrawalRatePct}>
+                            <td className="py-2 font-bold text-[#242823]">
+                              {w.annualWithdrawalRatePct}% a.a.
+                            </td>
+                            <td className="py-2 text-right">{formatCurrency(w.requiredCapitalReal)}</td>
+                            <td
+                              className={`py-2 text-right font-bold ${
+                                w.reachesDesiredIncomeInHorizon ? 'text-[#245A3C]' : 'text-[#795C24]'
+                              }`}
+                            >
+                              {formatCurrency(w.projectedSustainableMonthlyIncomeReal)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
                   <div className="p-3 rounded bg-[#F6F3ED] border border-[#E7E1D7] space-y-1.5 text-[11px] text-[#5F635C]">
                     <div className="font-semibold text-[#242823]">

@@ -30,6 +30,8 @@ import type { MarketAsset, MarketQuote, HistoricalCandle, MarketAssetType } from
 interface StockMarketSectionProps {
   watchlistAssetIds?: Set<string>;
   onToggleWatchlist?: (assetId: string) => Promise<void>;
+  selectedSymbol?: string | null;
+  onSelectSymbol?: (symbol: string) => void;
 }
 
 const CURATED_LISTS: Record<string, { symbol: string; name: string; type: MarketAssetType }[]> = {
@@ -80,7 +82,7 @@ function formatBRL(value?: number | null): string {
 }
 
 function formatPercent(value?: number | null): string {
-  if (value === undefined || value === null || !Number.isFinite(value)) return '0,00%';
+  if (value === undefined || value === null || !Number.isFinite(value)) return '--';
   const prefix = value > 0 ? '+' : '';
   return `${prefix}${value.toFixed(2).replace('.', ',')}%`;
 }
@@ -96,9 +98,11 @@ function formatVolume(val?: number | null): string {
 export function StockMarketSection({
   watchlistAssetIds = new Set(),
   onToggleWatchlist,
+  selectedSymbol: propSelectedSymbol,
+  onSelectSymbol,
 }: StockMarketSectionProps) {
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'STOCK' | 'FII' | 'BDR' | 'ETF'>('ALL');
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('PETR4');
+  const [selectedSymbol, setSelectedSymbol] = useState<string>(propSelectedSymbol || 'PETR4');
   const [selectedRange, setSelectedRange] = useState<'5d' | '1mo' | '6mo' | '1y'>('1mo');
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,6 +118,16 @@ export function StockMarketSection({
   const [popularQuotes, setPopularQuotes] = useState<Record<string, MarketQuote>>({});
   const [indices, setIndices] = useState<MarketQuote[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const requestSeqRef = React.useRef(0);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
+
+  // Sync external selectedSymbol prop
+  useEffect(() => {
+    if (propSelectedSymbol && propSelectedSymbol !== selectedSymbol) {
+      setSelectedSymbol(propSelectedSymbol);
+    }
+  }, [propSelectedSymbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 1. Fetch indices and popular quotes on mount
   const loadMarketData = useCallback(async () => {
@@ -151,12 +165,22 @@ export function StockMarketSection({
     loadMarketData();
   }, [loadMarketData]);
 
-  // 2. Fetch selected asset detail & candles
+  // 2. Fetch selected asset detail & candles with race-condition protection
   const loadAssetDetails = useCallback(async (sym: string, range: string, refresh = false) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const currentSeq = ++requestSeqRef.current;
+
     setIsLoadingQuote(true);
     try {
-      const res = await fetch(`/api/market/stocks/quote?symbols=${sym}&range=${range}&interval=1d${refresh ? '&refresh=true' : ''}`);
-      if (res.ok) {
+      const res = await fetch(
+        `/api/market/stocks/quote?symbols=${sym}&range=${range}&interval=1d${refresh ? '&refresh=true' : ''}`,
+        { signal: controller.signal }
+      );
+      if (res.ok && currentSeq === requestSeqRef.current) {
         const data = await res.json();
         if (data.quotes && data.quotes.length > 0) {
           setActiveQuote(data.quotes[0]);
@@ -168,10 +192,13 @@ export function StockMarketSection({
           setCandles(data.candlesBySymbol[sym]);
         }
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       console.warn(`Failed to load details for ${sym}:`, err);
     } finally {
-      setIsLoadingQuote(false);
+      if (currentSeq === requestSeqRef.current) {
+        setIsLoadingQuote(false);
+      }
     }
   }, []);
 
@@ -207,11 +234,14 @@ export function StockMarketSection({
     return () => clearTimeout(timer);
   }, [searchQuery, selectedCategory]);
 
-  const isPositive = (activeQuote?.change24hPct ?? 0) >= 0;
+  const hasValidChange = typeof activeQuote?.change24hPct === 'number' && Number.isFinite(activeQuote.change24hPct);
+  const isPositive = typeof activeQuote?.change24hPct === 'number' && activeQuote.change24hPct > 0;
+  const isNegative = typeof activeQuote?.change24hPct === 'number' && activeQuote.change24hPct < 0;
   const isWatchlisted = activeAsset ? watchlistAssetIds.has(activeAsset.id) : false;
 
   const handleSelectAsset = (sym: string) => {
     setSelectedSymbol(sym);
+    if (onSelectSymbol) onSelectSymbol(sym);
     setSearchQuery('');
     setSearchResults([]);
   };
@@ -244,17 +274,37 @@ export function StockMarketSection({
 
             {indices.map((idx) => {
               const sym = idx.assetId.replace('B3:', '');
-              const pos = idx.change24hPct >= 0;
+              const hasIdxChange = typeof idx.change24hPct === 'number' && Number.isFinite(idx.change24hPct);
+              const idxPos = typeof idx.change24hPct === 'number' && idx.change24hPct > 0;
+              const idxNeg = typeof idx.change24hPct === 'number' && idx.change24hPct < 0;
               return (
                 <div key={idx.id} className="pl-4 flex items-center gap-2 whitespace-nowrap">
                   <span className="font-semibold text-[#242823]">{sym === '^BVSP' ? 'IBOVESPA' : sym}</span>
-                  <span className="font-mono text-[#5F635C]">{sym === '^BVSP' ? idx.price.toLocaleString('pt-BR') : formatBRL(idx.price)}</span>
+                  <span className="font-mono text-[#5F635C]">
+                    {idx.price != null
+                      ? sym === '^BVSP'
+                        ? idx.price.toLocaleString('pt-BR')
+                        : formatBRL(idx.price)
+                      : '—'}
+                  </span>
                   <span
                     className={`inline-flex items-center font-mono font-medium text-[11px] ${
-                      pos ? 'text-[#15803D]' : 'text-[#B91C1C]'
+                      hasIdxChange
+                        ? idxPos
+                          ? 'text-[#15803D]'
+                          : idxNeg
+                          ? 'text-[#B91C1C]'
+                          : 'text-[#5F635C]'
+                        : 'text-[#777A72]'
                     }`}
                   >
-                    {pos ? <ArrowUpRight className="w-3 h-3 mr-0.5" /> : <ArrowDownRight className="w-3 h-3 mr-0.5" />}
+                    {hasIdxChange ? (
+                      idxPos ? (
+                        <ArrowUpRight className="w-3 h-3 mr-0.5" />
+                      ) : idxNeg ? (
+                        <ArrowDownRight className="w-3 h-3 mr-0.5" />
+                      ) : null
+                    ) : null}
                     {formatPercent(idx.change24hPct)}
                   </span>
                 </div>
@@ -445,11 +495,24 @@ export function StockMarketSection({
                 </span>
                 <span
                   className={`inline-flex items-center text-sm font-semibold font-mono ${
-                    isPositive ? 'text-[#15803D]' : 'text-[#B91C1C]'
+                    hasValidChange
+                      ? isPositive
+                        ? 'text-[#15803D]'
+                        : isNegative
+                        ? 'text-[#B91C1C]'
+                        : 'text-[#5F635C]'
+                      : 'text-[#777A72]'
                   }`}
                 >
-                  {isPositive ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
-                  {formatPercent(activeQuote?.change24hPct)} ({formatBRL(activeQuote?.change24hAmount)})
+                  {hasValidChange ? (
+                    isPositive ? (
+                      <TrendingUp className="w-4 h-4 mr-1" />
+                    ) : isNegative ? (
+                      <TrendingDown className="w-4 h-4 mr-1" />
+                    ) : null
+                  ) : null}
+                  {formatPercent(activeQuote?.change24hPct)}
+                  {activeQuote?.change24hAmount != null ? ` (${formatBRL(activeQuote.change24hAmount)})` : ''}
                 </span>
               </div>
 
@@ -478,7 +541,7 @@ export function StockMarketSection({
                 <AlertCircle className="w-4 h-4 shrink-0 text-[#D97706]" />
                 <span>
                   Dados obtidos do cache local. Horário de referência:{' '}
-                  <strong>{new Date(activeQuote.quoteTimestamp).toLocaleTimeString('pt-BR')}</strong>.
+                  <strong>{activeQuote.quoteTimestamp ? new Date(activeQuote.quoteTimestamp).toLocaleTimeString('pt-BR') : '—'}</strong>.
                 </span>
               </div>
             )}
@@ -521,8 +584,8 @@ export function StockMarketSection({
                     <AreaChart data={candles} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="marketGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={isPositive ? '#10B981' : '#B91C1C'} stopOpacity={0.25} />
-                          <stop offset="95%" stopColor={isPositive ? '#10B981' : '#B91C1C'} stopOpacity={0.0} />
+                          <stop offset="5%" stopColor={hasValidChange ? (isPositive ? '#10B981' : '#B91C1C') : '#5F635C'} stopOpacity={0.25} />
+                          <stop offset="95%" stopColor={hasValidChange ? (isPositive ? '#10B981' : '#B91C1C') : '#5F635C'} stopOpacity={0.0} />
                         </linearGradient>
                       </defs>
                       <XAxis
@@ -564,7 +627,7 @@ export function StockMarketSection({
                       <Area
                         type="monotone"
                         dataKey="close"
-                        stroke={isPositive ? '#15803D' : '#B91C1C'}
+                        stroke={hasValidChange ? (isPositive ? '#15803D' : '#B91C1C') : '#5F635C'}
                         strokeWidth={2}
                         fillOpacity={1}
                         fill="url(#marketGradient)"
@@ -644,7 +707,9 @@ export function StockMarketSection({
               {CURATED_LISTS[selectedCategory].map((item) => {
                 const quote = popularQuotes[item.symbol];
                 const isSelected = selectedSymbol === item.symbol;
-                const pos = (quote?.change24hPct ?? 0) >= 0;
+                const hasItemChange = typeof quote?.change24hPct === 'number' && Number.isFinite(quote.change24hPct);
+                const itemPos = typeof quote?.change24hPct === 'number' && quote.change24hPct > 0;
+                const itemNeg = typeof quote?.change24hPct === 'number' && quote.change24hPct < 0;
 
                 return (
                   <button
@@ -670,13 +735,23 @@ export function StockMarketSection({
                       </div>
                       <div
                         className={`font-mono text-[11px] font-medium flex items-center justify-end ${
-                          pos ? 'text-[#15803D]' : 'text-[#B91C1C]'
+                          hasItemChange
+                            ? itemPos
+                              ? 'text-[#15803D]'
+                              : itemNeg
+                              ? 'text-[#B91C1C]'
+                              : 'text-[#5F635C]'
+                            : 'text-[#777A72]'
                         }`}
                       >
-                        {quote ? (
+                        {hasItemChange ? (
                           <>
-                            {pos ? <ArrowUpRight className="w-3 h-3 mr-0.5" /> : <ArrowDownRight className="w-3 h-3 mr-0.5" />}
-                            {formatPercent(quote.change24hPct)}
+                            {itemPos ? (
+                              <ArrowUpRight className="w-3 h-3 mr-0.5" />
+                            ) : itemNeg ? (
+                              <ArrowDownRight className="w-3 h-3 mr-0.5" />
+                            ) : null}
+                            {formatPercent(quote?.change24hPct)}
                           </>
                         ) : (
                           '--'
