@@ -1,5 +1,10 @@
 # FinAI — Sprint 6: Auditoria de Confiabilidade, Integridade Financeira, Segurança e Desempenho
 
+<p align="center">
+  <a href="finai_sprint6_execution_report.en.md"><strong>English Version</strong></a> •
+  <a href="finai_sprint6_execution_report.md"><strong>Versão em Português</strong></a>
+</p>
+
 **Relatório técnico de execução**
 Data de execução: 2026-10-16
 Repositório: `~/Projetos/finai` (branch `main`, `origin` = github.com/BrunoCHRBN/finai)

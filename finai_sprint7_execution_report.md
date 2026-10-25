@@ -1,5 +1,10 @@
 # FinAI — Sprint 7: Gestão Avançada de Receitas, Fluxos Recorrentes Multiatômicos, Conciliação Financeira Determinística, Projeções de Caixa 30/60/90 Dias e Sincronização Inteligente Open Finance
 
+<p align="center">
+  <a href="finai_sprint7_execution_report.en.md"><strong>English Version</strong></a> •
+  <a href="finai_sprint7_execution_report.md"><strong>Versão em Português</strong></a>
+</p>
+
 **Relatório Técnico de Execução e Arquitetura**  
 Data de execução: 2026-10-16  
 Repositório: `~/Projetos/finai` (branch `main`, `origin` = github.com/BrunoCHRBN/finai)  

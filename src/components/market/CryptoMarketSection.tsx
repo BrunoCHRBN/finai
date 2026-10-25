@@ -156,6 +156,14 @@ export function CryptoMarketSection({
   const requestSeqRef = React.useRef(0);
   const abortControllerRef = React.useRef<AbortController | null>(null);
 
+  const periodReturnPct = React.useMemo(() => {
+    if (candles.length < 2) return null;
+    const first = candles[0].close;
+    const last = candles[candles.length - 1].close;
+    if (!first || first <= 0) return null;
+    return ((last - first) / first) * 100;
+  }, [candles]);
+
   // Sync external selectedSymbol prop
   useEffect(() => {
     if (propSelectedSymbol && propSelectedSymbol !== selectedSymbol) {
@@ -174,6 +182,7 @@ export function CryptoMarketSection({
 
     setIsLoadingQuote(true);
     setQuoteError(null);
+    setCandles([]);
     try {
       // 1y uses 1d interval with 365 candles for authentic annual view
       const interval = range === '1d' ? '1h' : range === '7d' ? '4h' : '1d';
@@ -551,9 +560,23 @@ export function CryptoMarketSection({
 
             {/* Time range selector for historical chart */}
             <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
-              <span className="text-[12px] font-sans text-[#777A72]">
-                Histórico de Cotações Spot (USDT)
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-sans text-[#777A72]">
+                  Histórico de Cotações Spot (USDT)
+                </span>
+                {periodReturnPct !== null && (
+                  <span
+                    className={`text-[11px] font-mono font-medium px-2 py-0.5 rounded ${
+                      periodReturnPct >= 0
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-red-50 text-red-700 border border-red-200'
+                    }`}
+                  >
+                    {periodReturnPct >= 0 ? '+' : ''}
+                    {periodReturnPct.toFixed(2).replace('.', ',')}% no período
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-1 bg-[#F6F3ED] p-1 rounded-lg border border-[#E7E1D7]">
                 {(
                   [

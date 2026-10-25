@@ -1,5 +1,10 @@
 # Relatório de Execução Sprint 7.1 — Correção de Precisão Temporal, Segurança de Webhooks e Integridade das Projeções
 
+<p align="center">
+  <a href="finai_sprint7_1_execution_report.en.md"><strong>English Version</strong></a> •
+  <a href="finai_sprint7_1_execution_report.md"><strong>Versão em Português</strong></a>
+</p>
+
 **Projeto:** FinAI — Planejamento Financeiro Pessoal Inteligente  
 **Sprint:** 7.1 (Revisão Corretiva e Endurecimento da Sprint 7)  
 **Data:** 16 de Outubro de 2026  
@@ -17,7 +22,7 @@ Nesta Sprint 7.1, todas as distorções foram erradicadas:
 1. **Motor de Projeção Concreto por Ocorrência:** A projeção contínua (30, 60 e 90 dias) foi inteiramente reescrita para avaliar ocorrências individuais concretas (`generateOccurrencesForFlow` ou registros persistidos em `recurringOccurrences`), eliminando completamente médias fracionárias e distorções de dias limites.
 2. **Periodicidades Explícitas:** Separou-se formalmente o passo estrito de 14 dias (`BIWEEKLY`, 26 ocorrências/ano) de duas datas nominais fixas no mês (`SEMIMONTHLY`, 24 ocorrências/ano) com suporte a `secondDayOfMonth` no banco de dados e na interface do usuário.
 3. **Autenticação e Idempotência Robusta de Webhooks:** Implementou-se validação em tempo constante (`crypto.timingSafeEqual`) do segredo compartilhado (`PLUGGY_WEBHOOK_SECRET`), chave primária de desduplicação ancorada em `eventId` oficial da Pluggy, e ciclo de vida transacional durável (`PROCESSING` -> `PROCESSED` / `FAILED` com mensagem de erro).
-4. **Transparência Operacional:** A interface de Open Finance agora explicita que a sincronização sob demanda é acionada por navegação ou CLI/cron de sistema operacional, eliminando a falsa premissa de um cron daemon interno residente no runtime serveless do Next.js.
+4. **Transparência Operacional:** A interface de Open Finance agora explicita que a sincronização sob demanda é acionada por navegação ou CLI/cron de sistema operacional, eliminando a falsa premissa de um cron daemon interno residente no runtime serverless do Next.js.
 5. **Proteção Total contra Casos Extremos:** O cálculo do indicador de comprometimento futuro (`futureCommitmentRatePct`) foi blindado contra divisão por zero e receitas zeradas, retornando 0% seguro em vez de falsos 100% ou `NaN`.
 6. **Mapeamento de Modelos Gemini:** Levantou-se o diagnóstico oficial de descontinuação junto à Google AI, mapeando a substituição planejada de `gemini-3.1-flash-lite` por `gemini-3.5-flash-lite`.
 7. **Verificação Integral:** A suíte de testes do repositório foi expandida para **178 testes aprovados em 34 suítes (0 falhas)**, 100% de detecção de mutações (13/13 mutantes eliminados) e build estático do Next.js concluído com sucesso.
@@ -48,7 +53,7 @@ Nesta Sprint 7.1, todas as distorções foram erradicadas:
 - **Problema:** Na Sprint 7, despesas semanais eram projetadas multiplicando o valor base por `(52 / 12) = 4,333`, e quinzenais por `(26 / 12) = 2,166`. Isso gerava centavos fracionários irreais e ignorava o fato de que um mês específico tem exatamente 4 ou 5 ocorrências a depender do dia da semana em que cai o primeiro dia. Além disso, o horizonte de 30 dias mapeava rigidamente para o mês de calendário 1, desconsiderando os dias restantes do mês atual (mês 0).
 - **Solução Técnica:** O motor agora computa a janela móvel `[todayDate, todayDate + N dias]`. Todas as ocorrências elegíveis nesse intervalo de datas são indexadas individualmente. Se uma ocorrência semanal cai 5 vezes dentro dos 30 dias, o valor projetado é rigorosamente `5 * valor`, e se cai 4 vezes, `4 * valor`.
 
-### 3.2. Detecção de Mergulho Intrames de Liquidez (`lowestProjectedBalance`)
+### 3.2. Detecção de Vale Intrames de Liquidez (`lowestProjectedBalance`)
 - **Problema:** Comparar apenas o saldo de fechamento no final de 30 dias escondia riscos graves de insolvência. Por exemplo: um usuário com saldo inicial de R$ 1.000,00 que tem uma despesa de R$ 1.800,00 no dia 5 e um salário de R$ 3.000,00 no dia 20 terminava o mês com saldo positivo de R$ 2.200,00, mas ficava negativado em -R$ 800,00 por 15 dias.
 - **Solução Técnica:** Implementou-se um algoritmo de balanço corrente cronológico que itera sobre cada data com movimentações na janela. O sistema detecta tanto o menor saldo projetado quanto o dia exato da ocorrência do vale (`lowestProjectedDate`), acionando a flag `isNegativeLiquidity = true` sempre que o saldo cair abaixo de zero.
 
@@ -70,7 +75,7 @@ Nesta Sprint 7.1, todas as distorções foram erradicadas:
 | **Despesa semanal (R$ 200, 4 ocorrências em 30 dias)** | Multiplicador médio: `200 * 4.333 = R$ 866,67` | Soma discreta: `4 * 200 = R$ 800,00` | Elimina sobrestimação de R$ 66,67 de compromisso inexistente. |
 | **Receita trimestral (R$ 6.000 no mês 3)** | Multiplicador médio: `6.000 * 0.333 = R$ 2.000/mês` | Alocação exata na data: R$ 0 nos meses 1 e 2; R$ 6.000 no mês 3 | Impede falsa expectativa de liquidez no primeiro mês. |
 | **Janela de 30 dias iniciando em 15/10** | Olhava rigidamente para o calendário de Novembro (mês 1) | Avalia período contínuo de 15/10 a 14/11 | Considera compromissos imediatos da segunda quinzena. |
-| **Mergulho negativo intrames** | Não identificado se saldo final do mês fosse positivo | Identifica o valor mínimo (`-R$ 800`) e a data exata (`15/10`) | Permite ao usuário antecipar resgates ou remanejamentos. |
+| **Vale negativo intrames** | Não identificado se saldo final do mês fosse positivo | Identifica o valor mínimo (`-R$ 800`) e a data exata (`15/10`) | Permite ao usuário antecipar resgates ou remanejamentos. |
 
 ---
 

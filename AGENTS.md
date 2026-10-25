@@ -1,3 +1,8 @@
+<p align="center">
+  <a href="AGENTS.md"><strong>English Version</strong></a> •
+  <a href="AGENTS.pt.md"><strong>Versão em Português</strong></a>
+</p>
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know

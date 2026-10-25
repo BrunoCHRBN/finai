@@ -175,6 +175,7 @@ export function StockMarketSection({
     const currentSeq = ++requestSeqRef.current;
 
     setIsLoadingQuote(true);
+    setCandles([]);
     try {
       const res = await fetch(
         `/api/market/stocks/quote?symbols=${sym}&range=${range}&interval=1d${refresh ? '&refresh=true' : ''}`,
@@ -188,8 +189,10 @@ export function StockMarketSection({
         if (data.assets && data.assets.length > 0) {
           setActiveAsset(data.assets[0]);
         }
-        if (data.candlesBySymbol && data.candlesBySymbol[sym]) {
+        if (data.candlesBySymbol && Array.isArray(data.candlesBySymbol[sym]) && data.candlesBySymbol[sym].length > 0) {
           setCandles(data.candlesBySymbol[sym]);
+        } else {
+          setCandles([]);
         }
       }
     } catch (err: unknown) {
@@ -238,6 +241,14 @@ export function StockMarketSection({
   const isPositive = typeof activeQuote?.change24hPct === 'number' && activeQuote.change24hPct > 0;
   const isNegative = typeof activeQuote?.change24hPct === 'number' && activeQuote.change24hPct < 0;
   const isWatchlisted = activeAsset ? watchlistAssetIds.has(activeAsset.id) : false;
+
+  const periodReturnPct = React.useMemo(() => {
+    if (candles.length < 2) return null;
+    const first = candles[0].close;
+    const last = candles[candles.length - 1].close;
+    if (!first || first <= 0) return null;
+    return ((last - first) / first) * 100;
+  }, [candles]);
 
   const handleSelectAsset = (sym: string) => {
     setSelectedSymbol(sym);
@@ -548,10 +559,22 @@ export function StockMarketSection({
 
             {/* Timeframe Selector & Chart */}
             <div className="mt-2 pt-4 border-t border-[#E7E1D7]">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-1.5 text-xs text-[#5F635C]">
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+                <div className="flex items-center gap-2 text-xs text-[#5F635C]">
                   <Clock className="w-3.5 h-3.5" />
                   <span>Histórico de Preços</span>
+                  {periodReturnPct !== null && (
+                    <span
+                      className={`text-[11px] font-mono font-medium px-2 py-0.5 rounded ${
+                        periodReturnPct >= 0
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-red-50 text-red-700 border border-red-200'
+                      }`}
+                    >
+                      {periodReturnPct >= 0 ? '+' : ''}
+                      {periodReturnPct.toFixed(2).replace('.', ',')}% no período
+                    </span>
+                  )}
                 </div>
 
                 {/* Range Buttons */}
@@ -605,7 +628,10 @@ export function StockMarketSection({
                         fontSize={10}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(v) => `R$ ${v.toFixed(0)}`}
+                        tickFormatter={(v) => {
+                          if (v == null || !Number.isFinite(v)) return '';
+                          return v < 50 ? `R$ ${v.toFixed(2).replace('.', ',')}` : `R$ ${v.toFixed(0)}`;
+                        }}
                       />
                       <Tooltip
                         content={({ active, payload }) => {
@@ -635,58 +661,113 @@ export function StockMarketSection({
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-[#777A72]">
-                    Nenhum candle histórico disponível para o período selecionado.
+                  <div className="h-full flex flex-col items-center justify-center text-xs text-[#777A72] gap-1 p-6 text-center">
+                    <AlertCircle className="w-5 h-5 text-[#A1A49D] mb-1" />
+                    <span className="font-medium text-[#5F635C]">Histórico de cotações não disponível para {selectedSymbol} neste período</span>
+                    <span className="text-[11px] text-[#A1A49D]">Tente alternar o período ou atualizar as cotações.</span>
                   </div>
                 )}
               </div>
             </div>
 
             {/* 4. Fundamental Metrics Grid (FIIs, Stocks, Valuation) */}
-            {activeQuote?.rawMetrics && (
-              <div className="mt-6 pt-5 border-t border-[#E7E1D7]">
-                <h4 className="text-xs font-semibold text-[#242823] uppercase tracking-wider mb-3">
-                  Indicadores Fundamentalistas
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                  <div className="bg-[#F6F3ED] p-3 border border-[#E7E1D7]">
-                    <span className="text-[10px] font-medium text-[#777A72] uppercase block">Dividend Yield (12m)</span>
-                    <span className="text-sm font-bold font-mono text-[#15803D] mt-0.5 block">
-                      {activeQuote.rawMetrics.dividendYield !== null && activeQuote.rawMetrics.dividendYield !== undefined
-                        ? `${Number(activeQuote.rawMetrics.dividendYield).toFixed(2).replace('.', ',')}%`
-                        : '--'}
+            {(() => {
+              const raw = activeQuote?.rawMetrics;
+              const isFii = activeAsset?.assetType === 'FII';
+              const hasAnyMetric = Boolean(
+                raw &&
+                  (raw.dividendYield != null ||
+                    raw.lastDividend != null ||
+                    raw.priceToEarnings != null ||
+                    raw.priceToBook != null ||
+                    raw.fiftyTwoWeekHigh != null ||
+                    raw.fiftyTwoWeekLow != null)
+              );
+
+              return (
+                <div className="mt-6 pt-5 border-t border-[#E7E1D7]">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-semibold text-[#242823] uppercase tracking-wider">
+                      Indicadores {isFii ? 'do Fundo Imobiliário' : 'Fundamentalistas'}
+                    </h4>
+                    <span className="text-[10px] text-[#777A72] font-mono">
+                      {isFii ? 'Métricas FII' : activeAsset?.assetType || 'B3'}
                     </span>
                   </div>
 
-                  <div className="bg-[#F6F3ED] p-3 border border-[#E7E1D7]">
-                    <span className="text-[10px] font-medium text-[#777A72] uppercase block">Último Provento</span>
-                    <span className="text-sm font-bold font-mono text-[#242823] mt-0.5 block">
-                      {activeQuote.rawMetrics.lastDividend !== null && activeQuote.rawMetrics.lastDividend !== undefined
-                        ? formatBRL(Number(activeQuote.rawMetrics.lastDividend))
-                        : '--'}
-                    </span>
-                  </div>
+                  {hasAnyMetric ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div className="bg-[#F6F3ED] p-3 border border-[#E7E1D7]">
+                        <span className="text-[10px] font-medium text-[#777A72] uppercase block">Dividend Yield (12m)</span>
+                        <span className="text-sm font-bold font-mono text-[#15803D] mt-0.5 block">
+                          {raw?.dividendYield !== null && raw?.dividendYield !== undefined
+                            ? `${Number(raw.dividendYield).toFixed(2).replace('.', ',')}%`
+                            : '--'}
+                        </span>
+                      </div>
 
-                  <div className="bg-[#F6F3ED] p-3 border border-[#E7E1D7]">
-                    <span className="text-[10px] font-medium text-[#777A72] uppercase block">Preço / Lucro (P/L)</span>
-                    <span className="text-sm font-bold font-mono text-[#242823] mt-0.5 block">
-                      {activeQuote.rawMetrics.priceToEarnings !== null && activeQuote.rawMetrics.priceToEarnings !== undefined
-                        ? Number(activeQuote.rawMetrics.priceToEarnings).toFixed(2).replace('.', ',')
-                        : '--'}
-                    </span>
-                  </div>
+                      <div className="bg-[#F6F3ED] p-3 border border-[#E7E1D7]">
+                        <span className="text-[10px] font-medium text-[#777A72] uppercase block">
+                          {isFii ? 'Último Rendimento' : 'Último Provento'}
+                        </span>
+                        <span className="text-sm font-bold font-mono text-[#242823] mt-0.5 block">
+                          {raw?.lastDividend !== null && raw?.lastDividend !== undefined
+                            ? formatBRL(Number(raw.lastDividend))
+                            : '--'}
+                        </span>
+                      </div>
 
-                  <div className="bg-[#F6F3ED] p-3 border border-[#E7E1D7]">
-                    <span className="text-[10px] font-medium text-[#777A72] uppercase block">P / Valor Patrimonial</span>
-                    <span className="text-sm font-bold font-mono text-[#242823] mt-0.5 block">
-                      {activeQuote.rawMetrics.priceToBook !== null && activeQuote.rawMetrics.priceToBook !== undefined
-                        ? Number(activeQuote.rawMetrics.priceToBook).toFixed(2).replace('.', ',')
-                        : '--'}
-                    </span>
-                  </div>
+                      {isFii ? (
+                        <div className="bg-[#F6F3ED] p-3 border border-[#E7E1D7]">
+                          <span className="text-[10px] font-medium text-[#777A72] uppercase block">Faixa 52 Semanas</span>
+                          <span className="text-xs font-bold font-mono text-[#242823] mt-1 block truncate">
+                            {raw?.fiftyTwoWeekLow != null && raw?.fiftyTwoWeekHigh != null
+                              ? `${formatBRL(raw.fiftyTwoWeekLow)} - ${formatBRL(raw.fiftyTwoWeekHigh)}`
+                              : raw?.fiftyTwoWeekHigh != null
+                              ? `Máx: ${formatBRL(raw.fiftyTwoWeekHigh)}`
+                              : '--'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="bg-[#F6F3ED] p-3 border border-[#E7E1D7]">
+                          <span className="text-[10px] font-medium text-[#777A72] uppercase block">Preço / Lucro (P/L)</span>
+                          <span className="text-sm font-bold font-mono text-[#242823] mt-0.5 block">
+                            {raw?.priceToEarnings !== null && raw?.priceToEarnings !== undefined
+                              ? Number(raw.priceToEarnings).toFixed(2).replace('.', ',')
+                              : '--'}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="bg-[#F6F3ED] p-3 border border-[#E7E1D7]">
+                        <span className="text-[10px] font-medium text-[#777A72] uppercase block">P / Valor Patrimonial</span>
+                        <span className="text-sm font-bold font-mono text-[#242823] mt-0.5 block">
+                          {raw?.priceToBook !== null && raw?.priceToBook !== undefined
+                            ? Number(raw.priceToBook).toFixed(2).replace('.', ',')
+                            : '--'}
+                        </span>
+                        {isFii && raw?.priceToBook != null && (
+                          <span className="text-[9px] text-[#777A72] block mt-0.5">
+                            {raw.priceToBook < 1
+                              ? 'Com desconto patrimonial'
+                              : raw.priceToBook > 1
+                              ? 'Com ágio sobre cota'
+                              : 'No valor patrimonial'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-[#F6F3ED] border border-[#E7E1D7] text-xs text-[#777A72] flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-[#A1A49D] shrink-0" />
+                      <span>
+                        Métricas fundamentalistas detalhadas não fornecidas pela fonte para {selectedSymbol}.
+                      </span>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
 

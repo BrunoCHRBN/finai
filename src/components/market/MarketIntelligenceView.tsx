@@ -138,8 +138,20 @@ export function MarketIntelligenceView() {
   };
 
   // Top Macro Indicators (Ibovespa, IFIX, USD/BRL rate, BTC, ETH)
-  const ibov = overview?.indices.find((i) => i.id === 'B3:^BVSP' || i.assetId === 'B3:^BVSP');
-  const ifix = overview?.indices.find((i) => i.id === 'B3:IFIX' || i.assetId === 'B3:IFIX');
+  const ibov = overview?.indices.find(
+    (i) => i.id === 'B3:^BVSP' || i.assetId === 'B3:^BVSP' || i.symbol === '^BVSP' || i.symbol === 'IBOV' || i.id.includes('^BVSP') || i.assetId.includes('^BVSP')
+  );
+  const ifix = overview?.indices.find(
+    (i) =>
+      i.id === 'B3:IFIX' ||
+      i.assetId === 'B3:IFIX' ||
+      i.id === 'B3:IFIX.SA' ||
+      i.assetId === 'B3:IFIX.SA' ||
+      i.symbol === 'IFIX' ||
+      i.symbol === 'IFIX.SA' ||
+      i.id.includes('IFIX') ||
+      i.assetId.includes('IFIX')
+  );
   const btc = overview?.cryptoHighlights.find((c) => c.symbol === 'BTCUSDT');
   const eth = overview?.cryptoHighlights.find((c) => c.symbol === 'ETHUSDT');
 
